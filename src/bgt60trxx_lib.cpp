@@ -4,6 +4,15 @@
 #include "bgt60trxx_lib.hpp"
 #include "pins_arduino.h"
 
+// define pins for spi communication
+#define RSPI_MOSI 41
+#define RSPI_MISO 42
+#define RSPI_SCLK 43
+#define RSPI_CS   44
+#define RXRES_L   40
+
+#define CHIP_FREQ 100000000
+
 // local functions
 //===========================
 
@@ -57,25 +66,31 @@ size_t writeToRegFile(BGT_ptr sensor, size_t address, size_t data);
 */
 int BytesToInt(byte* dataByte);
 
-// Because of misaligned address.
-// Address of FIFO = 0x60.
-// But when reading, sensor returns
-// error!
-// 4 words (or 6 bytes) seems to
-// be the minimum value where
-// an SPI-Read works.
+/*
+  Because of misaligned address.
+  Address of FIFO = 0x60.
+  But when reading, sensor returns
+  error!
+  4 words (or 6 bytes) seems to
+  be the minimum value where
+  an SPI-Read works.
+*/
 static const size_t skipFirstValues = 6;
 
 // Create an instance of SPIClassPSOC for SPI communication as slave
-#define RSPI_MOSI 41
-#define RSPI_MISO 42
-#define RSPI_SCLK 43
-#define RSPI_CS   44
-#define RXRES_L   40
-static SPIClassPSOC SPI1 = SPIClassPSOC(RSPI_MOSI, RSPI_MISO, RSPI_SCLK, NC, false);
+static SPIClassPSOC SPI1 = SPIClassPSOC(
+  RSPI_MOSI, 
+  RSPI_MISO, 
+  RSPI_SCLK, 
+  NC, 
+  false
+);
 static SPIClassPSOC *radar_sensor_spi = &SPI1;
 
-bgt60trxx_struct* initStruct(size_t const word_size, void * interrupt_handler)
+bgt60trxx_struct* initStruct(
+  size_t const word_size, 
+  voidFuncPtr interrupt_handler
+)
 {
   bgt60trxx_struct* ret = (bgt60trxx_struct*) malloc(sizeof(bgt60trxx_struct));
   if(ret == 0) return 0;
@@ -104,15 +119,11 @@ bgt60trxx_struct* initStruct(size_t const word_size, void * interrupt_handler)
   ret->interrupt_handler = interrupt_handler;
   if(interrupt_handler != 0)
   {
-    // Set Callback
-    //TODO
-      /*self.irq_radar = Pin("P11_0", 
-                           mode=Pin.IN, 
-                           pull=Pin.PULL_UP)
-      self.irq_radar.irq(handler=interrupt_handler,
-                         trigger=Pin.IRQ_RISING)
+    // Set the IRQ handler
+    attachInterrupt(digitalPinToInterrupt(RXRES_L), interrupt_handler, RISING);
 
-      print("Register IRQ-Event on Function: {0}".format(interrupt_handler))*/
+    // Print a message to indicate that the IRQ handler has been set
+    Serial.println("IRQ handler was set.");
   }
 
   //Reset Device
@@ -124,21 +135,31 @@ bgt60trxx_struct* initStruct(size_t const word_size, void * interrupt_handler)
   
   // Set SPI Interface with 50 MHz
   radar_sensor_spi->begin();
-  radar_sensor_spi->beginTransaction(SPISettings(50000000, MSBFIRST, SPI_MODE0));
+  radar_sensor_spi->beginTransaction(
+    SPISettings(50000000, MSBFIRST, SPI_MODE0)
+  );
   
   //Chirp Configuration
-  ret->start_freq = (fetchFromRegFile(ret, PLL1_0_ADDR) & PLL1_0_FSU_MASK);
-  ret->Clk_Per_Chirp = (fetchFromRegFile(ret, PLL1_2_ADDR) & PLL1_2_RTU_MASK);
-  ret->step_freq_chirp = (fetchFromRegFile(ret, PLL1_1_ADDR) & PLL1_1_RSU_MASK);
+  ret->start_freq = (fetchFromRegFile(ret, PLL1_0_ADDR) 
+                      & PLL1_0_FSU_MASK);
+  ret->Clk_Per_Chirp = (fetchFromRegFile(ret, PLL1_2_ADDR) 
+                      & PLL1_2_RTU_MASK);
+  ret->step_freq_chirp = (fetchFromRegFile(ret, PLL1_1_ADDR) 
+                      & PLL1_1_RSU_MASK);
+
+  ret->adc_div = (fetchFromRegFile(ret, ADC0_ADDR) 
+                    & ADC0_DIV_MASK) 
+                  >> ADC0_DIV_OFFSET;
 
   // FFT Config
   ret->vReal = (float*) malloc(sizeof(float)*(ret->word_size));
   ret->vImag = (float*) malloc(sizeof(float)*(ret->word_size));
-
-  ret->adc_div = (fetchFromRegFile(ret, ADC0_ADDR) & ADC0_DIV_MASK) >> ADC0_DIV_OFFSET;
-
-  //TODO: corret ADC_DIV FROM START!
-  ret->FFT = ArduinoFFT<float>(ret->vReal, ret->vImag, ret->word_size, 100000000 / ret->adc_div);
+  ret->FFT = ArduinoFFT<float>(
+    ret->vReal, 
+    ret->vImag, 
+    ret->word_size, 
+    CHIP_FREQ / ret->adc_div
+  );
 
   return ret;
 }
@@ -158,10 +179,14 @@ float get_range_resolution(constBGT_ptr sensor)
   size_t RSU = sensor->step_freq_chirp;
   size_t RTU = sensor->Clk_Per_Chirp;
   
-  float delta_f_RF = step_chirp_divider * f_adc_clk * (((float)RSU) / pow(2,20));
+  float delta_f_RF = step_chirp_divider 
+                      * f_adc_clk 
+                      * (((float)RSU) / pow(2,20));
 
   static size_t c0 = 300; // in Mm/s
-  float bandwidth = (RTU * 8) * delta_f_RF; // Multiply with 8! -> See Datasheet BGT60TRXX P.56 RTU
+
+  // Multiply with 8! -> See Datasheet BGT60TRXX P.56 RTU
+  float bandwidth = (RTU * 8) * delta_f_RF;
 
   return c0 / (2 * bandwidth);
 }
@@ -174,14 +199,17 @@ size_t read_reg(BGT_ptr sensor, size_t const reg_addr)
 
   // SPI Read
   digitalWrite(RSPI_CS, LOW);
-  sensor->regData[0] = radar_sensor_spi->transfer(addr); // Send address and read GSR0-Status-Register
-  for (int i = 1; i < DATA_SIZE; i++) {
-    sensor->regData[i] = radar_sensor_spi->transfer(0x00); // Read data
+
+  // Send address and read GSR0-Status-Register
+  sensor->regData[0] = radar_sensor_spi->transfer(addr); 
+  for (int i = 1; i < DATA_SIZE; i++) { // Read data
+    sensor->regData[i] = radar_sensor_spi->transfer(0x00);
   }
   digitalWrite(RSPI_CS, HIGH);
 
   // Check if Error Occured
-  if((sensor->regData[0] & 0x0F) != 0x0 and (sensor->regData[0] & 0x0F) != 0x4)
+  if((sensor->regData[0] & 0x0F) != 0x0 
+      and (sensor->regData[0] & 0x0F) != 0x4)
   {
     Serial.print("Status Register Error! GSR0 = ");
     Serial.println(sensor->regData[0], HEX);
@@ -194,7 +222,11 @@ size_t read_reg(BGT_ptr sensor, size_t const reg_addr)
   return BGT_SUCCESS;
 }
 
-size_t write_reg(constBGT_ptr sensor, size_t const reg_addr, size_t const data)
+size_t write_reg(
+  constBGT_ptr sensor, 
+  size_t const reg_addr, 
+  size_t const data
+)
 {
   //SPI Transfer Format: Addr - R/W - Data 
   int dataInt = ((reg_addr << ADDR_OFFSET) & ADDR_MASK);
@@ -216,7 +248,12 @@ size_t write_reg(constBGT_ptr sensor, size_t const reg_addr, size_t const data)
 size_t set_adc_div(BGT_ptr sensor, size_t const data)
 {
   sensor->adc_div = data;
-  sensor->FFT = ArduinoFFT<float>(sensor->vReal, sensor->vImag, sensor->word_size, 100000000 / sensor->adc_div);
+  sensor->FFT = ArduinoFFT<float>(
+    sensor->vReal, 
+    sensor->vImag, 
+    sensor->word_size, 
+    CHIP_FREQ / sensor->adc_div
+  );
   return set_init_value(sensor,
                         data, 
                         ADC0_ADDR, 
@@ -279,8 +316,12 @@ size_t set_vga_gain_ch1(BGT_ptr sensor, size_t const gain)
                   CSU1_2_VGA_GAIN1_OFFSET);
 }
 
-size_t set_init_value(BGT_ptr sensor, size_t const data, size_t const address, 
-                     size_t const reset_mask, size_t const offset)
+size_t set_init_value(
+  BGT_ptr sensor, 
+  size_t const data, 
+  size_t const address, 
+  size_t const reset_mask, 
+  size_t const offset)
 {
   size_t oldValue = fetchFromRegFile(sensor, address);
   size_t newValue = (oldValue & ~reset_mask) | (data << offset);
@@ -289,7 +330,10 @@ size_t set_init_value(BGT_ptr sensor, size_t const data, size_t const address,
   return BGT_SUCCESS;
 }
 
-size_t setCompareValue(BGT_ptr sensor, size_t const compare_value)
+size_t setCompareValue(
+  BGT_ptr sensor, 
+  size_t const compare_value
+)
 {
   if(compare_value >= 100)
   {
@@ -312,10 +356,12 @@ size_t setCompareValue(BGT_ptr sensor, size_t const compare_value)
 
 size_t enableTestMode(BGT_ptr sensor)
 {
-  if(!set_bits(sensor, SFCTL_ADDR, TEST_MODE_EN)) return BGT_ERROR;
+  if(!set_bits(sensor, SFCTL_ADDR, TEST_MODE_EN)) 
+    return BGT_ERROR;
 
   // Init RFT0 Register
-  if(!set_bits(sensor, RFT0_ADDR, TEST_IF_ENABLE)) return BGT_ERROR;
+  if(!set_bits(sensor, RFT0_ADDR, TEST_IF_ENABLE)) 
+    return BGT_ERROR;
 
   return resetFSM(sensor);
 }
@@ -336,7 +382,8 @@ size_t readFifo(BGT_ptr sensor)
   }
   
   // Check if Error Occured
-  if((sensor->headerGSR0[DATA_SIZE-1] & 0x0F) != 0x0 and (sensor->headerGSR0[DATA_SIZE-1] & 0x0F) != 0x4)
+  if((sensor->headerGSR0[DATA_SIZE-1] & 0x0F) != 0x0 
+    	and (sensor->headerGSR0[DATA_SIZE-1] & 0x0F) != 0x4)
   {
     Serial.print("Status Register Error! GSR0 = ");
     Serial.println(sensor->headerGSR0[DATA_SIZE-1], HEX);
@@ -408,7 +455,8 @@ size_t calculateRTU(size_t const adc_div, size_t const samples_per_chirp)
 
 size_t calculateFSU(size_t const start_freq)
 {
-  return size_t(pow(2,20) * ((((float)start_freq/640000))-96)) & 0xFFFFFF; // 24 bit two complement needed for sensor
+  // 24 bit two complement needed for sensor
+  return size_t(pow(2,20) * ((((float)start_freq/640000))-96)) & 0xFFFFFF;
 }
 
 size_t calculateRSU(size_t const bandwidth, size_t const RTU)
@@ -483,6 +531,7 @@ size_t unpackRecData(BGT_ptr sensor)
 size_t runHighPassFilter(BGT_ptr sensor)
 {
   // High-Pass Filter
+  // Chebyshev 2nd Order
   float x0 = 0.0;
   float x1 = 0.0;
   float x2 = 0.0;
@@ -498,7 +547,7 @@ size_t runHighPassFilter(BGT_ptr sensor)
     x0 = sensor->vReal[i];
     y2 = y1;
     y1 = y0;
-    y0 = x0*0.943 - x1*1.885 + x2*0.943 + y1*1.881 - y2*0.890;  // Chebyshev 2nd Order
+    y0 = x0*0.943 - x1*1.885 + x2*0.943 + y1*1.881 - y2*0.890; 
     sensor->vReal[i] = y0;
     i += 1;
   }

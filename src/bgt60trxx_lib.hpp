@@ -22,7 +22,7 @@ typedef struct
     float* vReal;
     float* vImag;
 
-    void* interrupt_handler;
+    voidFuncPtr interrupt_handler;
 
     size_t start_freq;
     size_t Clk_Per_Chirp;    
@@ -34,9 +34,14 @@ typedef struct
 typedef bgt60trxx_struct const * const constBGT_ptr;
 typedef bgt60trxx_struct * const BGT_ptr;
 
-// Implementation of an BGT60-Radar sensor using one antenna.
-// Creates a dynamic instance, which needs to be deleted by user!
-bgt60trxx_struct* initStruct(size_t const word_size, void * interrupt_handler);
+/* 
+    Implementation of an BGT60-Radar sensor using one antenna.
+    Creates a dynamic instance, which needs to be deleted by user!
+*/
+bgt60trxx_struct* initStruct(
+    size_t const word_size, 
+    voidFuncPtr interrupt_handler
+);
 
 /*
     Frees all Memory of Struct
@@ -59,7 +64,11 @@ size_t read_reg(BGT_ptr sensor, size_t const reg_addr);
     Write register of BGT60TR-Sensor with given Data
     Returns BGT_ERROR on Error
 */
-size_t write_reg(constBGT_ptr sensor, size_t const reg_addr, size_t const data);
+size_t write_reg(
+    constBGT_ptr sensor, 
+    size_t const reg_addr, 
+    size_t const data
+);
 
 /*
     sets frequency divider of adc. Only enabled with InitSensor-Method
@@ -84,7 +93,12 @@ size_t set_chirp_len(BGT_ptr sensor, size_t const chirp_len);
     for calculation of those values see Datasheet
     Returns BGT_ERROR on Error
 */ 
-size_t configure_chirp(BGT_ptr sensor, size_t const N_FSU, size_t const N_RTU, size_t const N_RSU);
+size_t configure_chirp(
+    BGT_ptr sensor, 
+    size_t const N_FSU, 
+    size_t const N_RTU, 
+    size_t const N_RSU
+);
 
 /*
     Amplifier for recieved signal (Channel 1) from sensor. 
@@ -99,8 +113,13 @@ size_t set_vga_gain_ch1(BGT_ptr sensor, size_t const gain);
     Only enabled with InitSensor-Method.
     Returns BGT_ERROR on Error
 */
-size_t set_init_value(BGT_ptr sensor, size_t const data, size_t const address, 
-                     size_t const reset_mask, size_t const offset);
+size_t set_init_value(
+    BGT_ptr sensor, 
+    size_t const data, 
+    size_t const address, 
+    size_t const reset_mask, 
+    size_t const offset
+);
 
 
 /*

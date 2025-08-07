@@ -197,7 +197,8 @@ const reg_pair init_register_list[SIZE_REG_FILE] = {
     {CCR0_ADDR, 0x5911be0e},
     {CCR1_ADDR, 0x5b44c40a}, // T_START = (0x0a * 8 + 10 * t_sys = 1.125us
     {CCR2_ADDR, 0x5d000000},
-    {CCR3_ADDR, 0x5f787e1e}, // T_PAEN = 0x1e * 8 * t_sys = 3us; T_SSTART = (0x1e * 8 + 1 * t_sys = 3.0125us
+    {CCR3_ADDR, 0x5f787e1e}, // T_PAEN = 0x1e * 8 * t_sys = 3us; 
+                             //T_SSTART = (0x1e * 8 + 1 * t_sys = 3.0125us
     {PLL1_0_ADDR, 0x61f5208a},
     {PLL1_1_ADDR, 0x630000a4},
     {PLL1_2_ADDR, 0x65000252},
