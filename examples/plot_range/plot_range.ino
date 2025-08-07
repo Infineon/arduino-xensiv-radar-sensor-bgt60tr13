@@ -6,18 +6,18 @@
 #include <time.h>
 
 // const values
-const size_t no_of_chirps = 1;
-const size_t samples_per_chirp = 128;
-const size_t words = samples_per_chirp * no_of_chirps;
-const size_t ADC_DIV = 60;
-const size_t start_freq = 62500000;  // in kHz
-const size_t bandwidth  =  2000000;    // in kHz
+static const size_t no_of_chirps = 1;
+static const size_t samples_per_chirp = 128;
+static const size_t words = samples_per_chirp * no_of_chirps;
+static const size_t ADC_DIV = 60;
+static const size_t start_freq = 62500000;  // in kHz
+static const size_t bandwidth  =  2000000;    // in kHz
 
-bgt60trxx_struct* bgt60trxx_sensor;
+static bgt60trxx_struct* bgt60trxx_sensor;
 
-float fft_data[words / 2];
+static float fft_data[words / 2];
 
-float range_resolution;
+static float range_resolution;
 
 void interrupt_handler() {
   Serial.println(">Interrupt Handler called");
@@ -41,7 +41,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(USER_BUTTON, INPUT);
 
-  bgt60trxx_sensor = initStruct(words, (void*)interrupt_handler);
+  bgt60trxx_sensor = initStruct(words, (*interrupt_handler));
 
   Serial.println("> Reset Sensor...");
   reset(bgt60trxx_sensor);
