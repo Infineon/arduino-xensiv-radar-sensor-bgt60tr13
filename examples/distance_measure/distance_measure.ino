@@ -16,25 +16,48 @@ static const size_t bandwidth  =  2000000;    // in kHz
 static const float threshold_for_lower_freq = 43.8;
 static const float threshold_for_upper_freq = 33.5;
 
+static const size_t threshold_start = 20;  // in cm
+static const size_t threshold_end = 190;    // in cm
+
 static bgt60trxx_struct* bgt60trxx_sensor;
 
 static float fft_data[words / 2];
 
 static float range_resolution;
 
+/*
+  Define the pins for the BGT60TR13C sensor.
+  The Board used is the Infineon CY8CKIT-062S2-AI.
+*/
+#define RSPI_MOSI 41
+#define RSPI_MISO 42
+#define RSPI_SCLK 43
+#define RSPI_CS   44
+#define RXRES_L   40
+
+/**
+ * @brief Interrupt handler function.
+ */
 void interrupt_handler() {
   Serial.println(">Interrupt Handler called");
 }
 
 float threshold_func[words / 2];
-//detect first peak in signal.
-//Uses a Threshold Function:
-//  if x < start -> threshold_for_lower_freq
-//  if x > end   -> threshold_for_upper_freq
-//  else         -> build linear function between first two
+/**
+ * @brief Finds the nearest peak in the signal based on a threshold function.
+ * 
+ * Uses this Threshold Function:
+ *  if x < start -> threshold_for_lower_freq
+ *  if x > end   -> threshold_for_upper_freq
+ *  else         -> build linear function between first two
+ * 
+ * @param signal Pointer to the signal data.
+ * @param threshold_index_start Index to start the threshold function.
+ * @param threshold_index_end Index to end the threshold function.
+ */
 void find_nearest_peak(float const * const signal,
-                      size_t threshold_index_start,
-                      size_t threshold_index_end)
+                      size_t const threshold_index_start,
+                      size_t const threshold_index_end)
 {
   for(size_t i = 0; i < words/2; i++)
   {
@@ -67,7 +90,12 @@ void find_nearest_peak(float const * const signal,
   }
 }
 
-void fft_to_dB(float* fft_data, size_t length) {
+/**
+ * @brief Converts FFT data to dB scale.
+ * @param fft_data Pointer to the FFT data array.
+ * @param length Length of the FFT data array.
+ */
+void fft_to_dB(float * const fft_data, size_t const length) {
   size_t i = 1;
   while (i < length) {
     // clip signal
@@ -82,10 +110,16 @@ void fft_to_dB(float* fft_data, size_t length) {
 void setup() {
   Serial.begin(115200);
 
+  printf("> Serial Monitor enabled.");
+
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(USER_BUTTON, INPUT);
 
-  bgt60trxx_sensor = initStruct(words, (*interrupt_handler));
+  bgt60trxx_sensor = init_struct(words, (*interrupt_handler));
+  if (!bgt60trxx_sensor) {
+    Serial.println("Sensor initialization failed!");
+    while (1);
+  }
 
   Serial.println("> Reset Sensor...");
   reset(bgt60trxx_sensor);
@@ -93,9 +127,9 @@ void setup() {
   set_adc_div(bgt60trxx_sensor, ADC_DIV);
   set_chirp_len(bgt60trxx_sensor, samples_per_chirp);
 
-  size_t FSU = calculateFSU(start_freq);
-  size_t RTU = calculateRTU(ADC_DIV, samples_per_chirp);
-  size_t RSU = calculateRSU(bandwidth, RTU);
+  size_t FSU = calculate_FSU(start_freq);
+  size_t RTU = calculate_RTU(ADC_DIV, samples_per_chirp);
+  size_t RSU = calculate_RSU(bandwidth, RTU);
 
   Serial.print("> FSU = ");
   Serial.println(FSU);
@@ -110,32 +144,38 @@ void setup() {
 
   set_vga_gain_ch1(bgt60trxx_sensor, 3);
 
-  initSensor(bgt60trxx_sensor);
+  init_sensor(bgt60trxx_sensor);
   Serial.println("> Sensor initialised!");
   
   range_resolution = get_range_resolution(bgt60trxx_sensor) * 100;  // in cm
   Serial.print("> Range resoultion is = ");
   Serial.println(range_resolution);
   
-  startFrame(bgt60trxx_sensor);
+  start_frame(bgt60trxx_sensor);
 }
 
 void loop() {
-  readDistance(bgt60trxx_sensor);
+  read_distance(bgt60trxx_sensor);
+
+  size_t const len = get_fft_length(bgt60trxx_sensor);
+  float* fft_measured_data = get_fft_data(bgt60trxx_sensor);
 
   // divide by 2 -> removes duplication spectrum
-  for (size_t i = 0; i < bgt60trxx_sensor->word_size / 2; i++) {
-    fft_data[i] = abs(bgt60trxx_sensor->vReal[i]);
+  for (size_t i = 0; i <len / 2; i++) {
+    fft_data[i] = abs(fft_measured_data[i]);
   }
 
   // transform data to db-scale
-  fft_to_dB(fft_data, bgt60trxx_sensor->word_size/2);
+  fft_to_dB(fft_data, len/2);
 
-  find_nearest_peak(fft_data, 20/(range_resolution/ no_of_chirps), 
-                    190/(range_resolution/ no_of_chirps));
+  find_nearest_peak(
+    fft_data, 
+    threshold_start/(range_resolution/ no_of_chirps), 
+    threshold_end/(range_resolution/ no_of_chirps)
+  );
 
   delay(100);
   
-  resetFIFO(bgt60trxx_sensor);
-  startFrame(bgt60trxx_sensor);
+  reset_FIFO(bgt60trxx_sensor);
+  start_frame(bgt60trxx_sensor);
 }

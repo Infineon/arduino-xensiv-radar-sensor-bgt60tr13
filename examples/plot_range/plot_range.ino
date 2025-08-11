@@ -19,11 +19,29 @@ static float fft_data[words / 2];
 
 static float range_resolution;
 
+/*
+  Define the pins for the BGT60TR13C sensor.
+  The Board used is the Infineon CY8CKIT-062S2-AI.
+*/
+#define RSPI_MOSI 41
+#define RSPI_MISO 42
+#define RSPI_SCLK 43
+#define RSPI_CS   44
+#define RXRES_L   40
+
+/**
+ * @brief Interrupt handler function.
+ */
 void interrupt_handler() {
   Serial.println(">Interrupt Handler called");
 }
 
-void fft_to_dB(float* fft_data, size_t length) {
+/**
+ * @brief Converts FFT data to dB scale.
+ * @param fft_data Pointer to the FFT data array.
+ * @param length Length of the FFT data array.
+ */
+void fft_to_dB(float * const fft_data, size_t const length) {
   size_t i = 1;
   while (i < length) {
     // clip signal
@@ -41,7 +59,11 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(USER_BUTTON, INPUT);
 
-  bgt60trxx_sensor = initStruct(words, (*interrupt_handler));
+  bgt60trxx_sensor = init_struct(words, (*interrupt_handler));
+  if (!bgt60trxx_sensor) {
+    Serial.println("Sensor initialization failed!");
+    while (1);
+  }
 
   Serial.println("> Reset Sensor...");
   reset(bgt60trxx_sensor);
@@ -49,9 +71,9 @@ void setup() {
   set_adc_div(bgt60trxx_sensor, ADC_DIV);
   set_chirp_len(bgt60trxx_sensor, samples_per_chirp);
 
-  size_t FSU = calculateFSU(start_freq);
-  size_t RTU = calculateRTU(ADC_DIV, samples_per_chirp);
-  size_t RSU = calculateRSU(bandwidth, RTU);
+  size_t FSU = calculate_FSU(start_freq);
+  size_t RTU = calculate_RTU(ADC_DIV, samples_per_chirp);
+  size_t RSU = calculate_RSU(bandwidth, RTU);
   
   Serial.print("> FSU = ");
   Serial.println(FSU);
@@ -66,33 +88,36 @@ void setup() {
 
   set_vga_gain_ch1(bgt60trxx_sensor, 3);
 
-  initSensor(bgt60trxx_sensor);
+  init_sensor(bgt60trxx_sensor);
   Serial.println("> Sensor initialised!");
   
   range_resolution = get_range_resolution(bgt60trxx_sensor) * 100;  // in cm
   Serial.print("> Range resoultion is = ");
   Serial.println(range_resolution);
   
-  startFrame(bgt60trxx_sensor);
+  start_frame(bgt60trxx_sensor);
 }
 
 void loop() {
   unsigned long startTime = millis();
-  readDistance(bgt60trxx_sensor);
+  read_distance(bgt60trxx_sensor);
   unsigned long elapsedTime = millis() - startTime;
 
   Serial.print(">Function readFIFO Time [ms] = ");
   Serial.println(elapsedTime);
+  
+  size_t const len = get_fft_length(bgt60trxx_sensor);
+  float* fft_measured_data = get_fft_data(bgt60trxx_sensor);
 
   // divide by 2 -> removes duplication spectrum
-  for (size_t i = 0; i < bgt60trxx_sensor->word_size / 2; i++) {
-    fft_data[i] = bgt60trxx_sensor->vReal[i];
+  for (size_t i = 0; i < len / 2; i++) {
+    fft_data[i] = fft_measured_data[i];
   }
 
   // transform data to db-scale
-  fft_to_dB(fft_data, bgt60trxx_sensor->word_size/2);
+  fft_to_dB(fft_data, len / 2);
 
-  for (size_t i = 0; i < bgt60trxx_sensor->word_size / 2; i++) {
+  for (size_t i = 0; i < len / 2; i++) {
     double distance = i * range_resolution / no_of_chirps;
     Serial.print(distance);
     Serial.print(",");
@@ -103,6 +128,6 @@ void loop() {
 
   delay(100);
   
-  resetFIFO(bgt60trxx_sensor);
-  startFrame(bgt60trxx_sensor);
+  reset_FIFO(bgt60trxx_sensor);
+  start_frame(bgt60trxx_sensor);
 }
