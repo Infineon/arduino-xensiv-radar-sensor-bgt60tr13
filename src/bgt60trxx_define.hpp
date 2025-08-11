@@ -152,9 +152,9 @@
 #define FIFO_ADDR                (0x60)
 
 // FIFO
-constexpr size_t FIFO_SIZE = 8192;
-constexpr size_t FIFO_SIZE_BYTE = 12288;
-constexpr size_t DATA_SIZE = 4;
+#define FIFO_SIZE                (8192)
+#define FIFO_SIZE_BYTE           (12288)
+#define DATA_SIZE                (4)
 
 // 0xFF = Adress; 
 // FIFO-Address is shifted by (<< 1)
