@@ -60,7 +60,7 @@ using BGT_ptr = bgt60trxx_struct * const;
 bgt60trxx_struct* init_struct(
     size_t const word_size, 
     voidFuncPtr interrupt_handler,
-    arduino::HardwareSPI *spi_interface
+    arduino::HardwareSPI *spi_interface = &SPI
 );
 
 /**
