@@ -169,7 +169,7 @@ typedef struct{
 } reg_pair;
 
 // Init Register Values for sensor
-constexpr size_t SIZE_REG_FILE = 38;
+constexpr int SIZE_REG_FILE = 38;
 const reg_pair init_register_list[SIZE_REG_FILE] = {
     {MAIN_ADDR, 0x011e8270},
     {ADC0_ADDR, 0x03088210},

@@ -1,4 +1,3 @@
-#include "cy_syslib.h"
 #include <Arduino.h>
 #include <SPI.h>
 #include "bgt60tr13c.hpp"
