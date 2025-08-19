@@ -1,9 +1,4 @@
-/// Main program to measure distance
-/// from the bgt60tr13c sensor in arduino.
-/// 14.07.2025
-/// Samuel Weissenbacher, Infinieon
-/// ======================================================
-#include "bgt60trxx_lib.hpp"
+#include "bgt60tr13c.hpp"
 
 // const values
 static const size_t no_of_chirps = 1;
@@ -34,6 +29,14 @@ static float range_resolution;
 #define RSPI_SCLK 43
 #define RSPI_CS   44
 #define RXRES_L   40
+
+static SPIClassPSOC spi_interface = SPIClassPSOC(
+  RSPI_MOSI, 
+  RSPI_MISO, 
+  RSPI_SCLK, 
+  NC, 
+  false
+);
 
 /**
  * @brief Interrupt handler function.
@@ -115,7 +118,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(USER_BUTTON, INPUT);
 
-  bgt60trxx_sensor = init_struct(words, (*interrupt_handler));
+  bgt60trxx_sensor = init_struct(words, &interrupt_handler, &spi_interface);
   if (!bgt60trxx_sensor) {
     Serial.println("Sensor initialization failed!");
     while (1);

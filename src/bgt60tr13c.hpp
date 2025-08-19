@@ -2,6 +2,7 @@
 #define BGT60TR13C_LIB_HPP
 
 #include <Arduino.h>
+#include <SPI.h>
 #include "bgt60tr13c_regs.hpp"
 #include "arduinoFFT.h"
 
@@ -31,6 +32,8 @@ struct bgt60trxx_struct
     voidFuncPtr interrupt_handler;
     byte* data;
 
+    arduino::HardwareSPI* radar_sensor_spi;
+
     // Chirp configuration
     size_t start_freq;
     size_t clk_per_chirp;    
@@ -56,7 +59,8 @@ using BGT_ptr = bgt60trxx_struct * const;
  */
 bgt60trxx_struct* init_struct(
     size_t const word_size, 
-    voidFuncPtr interrupt_handler
+    voidFuncPtr interrupt_handler,
+    arduino::HardwareSPI *spi_interface
 );
 
 /**

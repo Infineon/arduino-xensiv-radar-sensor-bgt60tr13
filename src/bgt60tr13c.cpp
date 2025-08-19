@@ -1,5 +1,5 @@
+#include "api/HardwareSPI.h"
 #include <Arduino.h>
-#include <SPI.h>
 #include "bgt60tr13c.hpp"
 #include "pins_arduino.h"
 
@@ -107,19 +107,10 @@ int bytes_to_int(byte const * const dataByte);
  */
 static const size_t skipFirstValues = 6;
 
-// Create an instance of SPIClassPSOC for SPI communication as slave
-static SPIClassPSOC SPI1 = SPIClassPSOC(
-  RSPI_MOSI, 
-  RSPI_MISO, 
-  RSPI_SCLK, 
-  NC, 
-  false
-);
-static SPIClassPSOC *radar_sensor_spi = &SPI1;
-
 bgt60trxx_struct* init_struct(
   size_t const word_size, 
-  voidFuncPtr interrupt_handler
+  voidFuncPtr interrupt_handler,
+  arduino::HardwareSPI *spi_interface
 )
 {
   bgt60trxx_struct* ret = (bgt60trxx_struct*) malloc(sizeof(bgt60trxx_struct));
@@ -162,10 +153,12 @@ bgt60trxx_struct* init_struct(
   digitalWrite(RSPI_CS, HIGH);
   digitalWrite(RXRES_L, LOW);
   digitalWrite(RXRES_L, HIGH);
+
+  ret->radar_sensor_spi = spi_interface;
   
   // Set SPI Interface with 50 MHz
-  radar_sensor_spi->begin();
-  radar_sensor_spi->beginTransaction(
+  ret->radar_sensor_spi->begin();
+  ret->radar_sensor_spi->beginTransaction(
     SPISettings(50000000, MSBFIRST, SPI_MODE0)
   );
   
@@ -233,9 +226,9 @@ BGT_status read_reg(BGT_ptr sensor, size_t const reg_addr)
   digitalWrite(RSPI_CS, LOW);
 
   // Send address and read GSR0-Status-Register
-  sensor->reg_data[0] = radar_sensor_spi->transfer(addr); 
+  sensor->reg_data[0] = sensor->radar_sensor_spi->transfer(addr); 
   for (int i = 1; i < DATA_SIZE; i++) { // Read data
-    sensor->reg_data[i] = radar_sensor_spi->transfer(0x00);
+    sensor->reg_data[i] = sensor->radar_sensor_spi->transfer(0x00);
   }
   digitalWrite(RSPI_CS, HIGH);
 
@@ -271,7 +264,7 @@ BGT_status write_reg(
   // SPI Write
   digitalWrite(RSPI_CS, LOW);
   for (int i = 0; i < DATA_SIZE; i++) {
-    radar_sensor_spi->transfer(dataToSend[i]); // Write data
+    sensor->radar_sensor_spi->transfer(dataToSend[i]); // Write data
   }
   digitalWrite(RSPI_CS, HIGH);
   return BGT_status::BGT_success;
@@ -412,7 +405,7 @@ BGT_status read_fifo(BGT_ptr sensor)
 
   for(int i = 0; i < DATA_SIZE; i++)
   {
-    sensor->header_GSR0[i] = radar_sensor_spi->transfer(ENABLE_BURST_MODE[i]);
+    sensor->header_GSR0[i] = sensor->radar_sensor_spi->transfer(ENABLE_BURST_MODE[i]);
   }
   
   // Check if Error Occured
@@ -426,7 +419,7 @@ BGT_status read_fifo(BGT_ptr sensor)
 
   for(size_t i = 0; i < sensor->frame_size; i++)
   {
-    sensor->data[i] = radar_sensor_spi->transfer(0x00);
+    sensor->data[i] = sensor->radar_sensor_spi->transfer(0x00);
   }
 
   digitalWrite(RSPI_CS, HIGH);
