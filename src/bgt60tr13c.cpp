@@ -1,7 +1,7 @@
 #include "cy_syslib.h"
 #include <Arduino.h>
 #include <SPI.h>
-#include "bgt60trxx_lib.hpp"
+#include "bgt60tr13c.hpp"
 #include "pins_arduino.h"
 
 /*

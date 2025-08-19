@@ -1,10 +1,5 @@
-/// ================================================
-/// defines const Values needed for BGT60TRXX Sensor
-/// Samuel Weissenbacher, 06.2025
-///=================================================
-
-#ifndef BGT60TRXX_DEFINE_HPP
-#define BGT60TRXX_DEFINE_HPP
+#ifndef BGT60TR13C_DEFINE_HPP
+#define BGT60TR13C_DEFINE_HPP
 
 // Register Mask and Offset Values
 #define ADDR_MASK                (0xFE000000)

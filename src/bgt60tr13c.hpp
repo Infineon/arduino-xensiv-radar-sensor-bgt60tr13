@@ -1,9 +1,8 @@
-/// Library for BGT60TRXX-Sensor on PSOC6-Boards
-#ifndef BGT60TRXX_LIB_HPP
-#define BGT60TRXX_LIB_HPP
+#ifndef BGT60TR13C_LIB_HPP
+#define BGT60TR13C_LIB_HPP
 
 #include <Arduino.h>
-#include "bgt60trxx_define.hpp"
+#include "bgt60tr13c_regs.hpp"
 #include "arduinoFFT.h"
 
 enum class BGT_status : uint8_t {
