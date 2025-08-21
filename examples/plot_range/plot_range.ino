@@ -50,19 +50,6 @@ void interrupt_handler() {
   Serial.println(">Interrupt Handler called");
 }
 
-#ifdef ARDUINO_FEATHER_ESP32
-/**
- * Feather esp32 does not include the standard
- * max function. So this function redifines it,
- * so the file works for esp32 as well.
- */
-template<class T, class L> 
-auto max(const T& a, const L& b) -> decltype((b < a) ? b : a)
-{
-  return (a < b) ? b : a;
-}
-#endif
-
 /**
  * @brief Converts FFT data to dB scale.
  * @param fft_data Pointer to the FFT data array.
@@ -72,7 +59,8 @@ void fft_to_dB(float * const fft_data, size_t const length) {
   size_t i = 1;
   while (i < length) {
     // clip signal
-    fft_data[i] = max(0.001, fft_data[i]);
+    if(fft_data[i] < 0.001)
+      fft_data[i] = 0.001;
     // calculate to dB-Scale
     fft_data[i] = (10.0 * log10(fft_data[i]));
     i += 1;
