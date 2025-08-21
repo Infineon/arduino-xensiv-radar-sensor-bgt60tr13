@@ -1,3 +1,4 @@
+#include <SPI.h>
 #include "bgt60tr13c.hpp"
 
 // const values
@@ -30,13 +31,22 @@ static float range_resolution;
 #define RSPI_CS   44
 #define RXRES_L   40
 
-static SPIClassPSOC spi_interface = SPIClassPSOC(
+#ifdef TARGET_APP_CY8CKIT_062S2_AI
+// The CY8CKIT-062S2-AI-Board uses the
+// class SPIClassPSOC to create a new SPI-Instance.
+// This way, we can wire the radar sensor directly
+// to the spi interface.
+static SPIClassPSOC spi_radar_interface = SPIClassPSOC(
   RSPI_MOSI, 
   RSPI_MISO, 
   RSPI_SCLK, 
   NC, 
   false
 );
+static HardwareSPI* spi_interface = &spi_radar_interface;
+#else
+static HardwareSPI* spi_interface = &SPI;
+#endif
 
 /**
  * @brief Interrupt handler function.
@@ -118,7 +128,7 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);
   pinMode(USER_BUTTON, INPUT);
 
-  bgt60trxx_sensor = init_struct(words, &interrupt_handler, &spi_interface);
+  bgt60trxx_sensor = init_struct(words, &interrupt_handler, spi_interface);
   if (!bgt60trxx_sensor) {
     Serial.println("Sensor initialization failed!");
     while (1);

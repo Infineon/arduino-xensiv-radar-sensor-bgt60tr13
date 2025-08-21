@@ -1,5 +1,3 @@
-#include <SPI.h>
-#include <Arduino.h>
 #include "bgt60tr13c.hpp"
 #include "pins_arduino.h"
 
@@ -110,7 +108,7 @@ static const size_t skipFirstValues = 6;
 bgt60trxx_struct* init_struct(
   size_t const word_size, 
   voidFuncPtr interrupt_handler,
-  arduino::HardwareSPI *spi_interface
+  HardwareSPI *spi_interface
 )
 {
   bgt60trxx_struct* ret = (bgt60trxx_struct*) malloc(sizeof(bgt60trxx_struct));
