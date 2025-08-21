@@ -112,7 +112,8 @@ void fft_to_dB(float * const fft_data, size_t const length) {
   size_t i = 1;
   while (i < length) {
     // clip signal
-    fft_data[i] = max(0.001, fft_data[i]);
+    if(fft_data[i] < 0.001)
+      fft_data[i] = 0.001;
     // calculate to dB-Scale
     fft_data[i] = (10.0 * log10(fft_data[i]));
     i += 1;
