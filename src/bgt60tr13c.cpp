@@ -1,29 +1,6 @@
 #include "bgt60tr13c.hpp"
 #include "pins_arduino.h"
 
-/*
-  Define pins for SPI communication,
-  when not already defined.
-*/
-#ifndef RSPI_MOSI
-  #define RSPI_MOSI 41
-#endif
-
-#ifndef RSPI_MISO
-  #define RSPI_MISO 42
-#endif
-
-#ifndef RSPI_SCLK
-  #define RSPI_SCLK 43
-#endif
-
-#ifndef RSPI_CS
-  #define RSPI_CS   44
-#endif
-
-#ifndef RXRES_L
-  #define RXRES_L   40
-#endif
 
 #define CHIP_FREQ 100000000
 
@@ -108,6 +85,8 @@ static const size_t skipFirstValues = 6;
 bgt60trxx_struct* init_struct(
   size_t const word_size, 
   voidFuncPtr interrupt_handler,
+  size_t pin_cs,
+  size_t pin_interrupt,
   SPIClass *spi_interface
 )
 {
@@ -139,20 +118,14 @@ bgt60trxx_struct* init_struct(
   if(interrupt_handler != 0)
   {
     // Set the IRQ handler
-    attachInterrupt(digitalPinToInterrupt(RXRES_L), interrupt_handler, RISING);
+    attachInterrupt(digitalPinToInterrupt(pin_interrupt), interrupt_handler, RISING);
 
     // Print a message to indicate that the IRQ handler has been set
     Serial.println("IRQ handler was set.");
   }
 
-  //Reset Device
-  pinMode(RXRES_L, OUTPUT);
-  pinMode(RSPI_CS, OUTPUT);
-  digitalWrite(RSPI_CS, HIGH);
-  digitalWrite(RXRES_L, LOW);
-  digitalWrite(RXRES_L, HIGH);
-
   ret->radar_sensor_spi = spi_interface;
+  ret->pin_cs = pin_cs;
   
   // Set SPI Interface with 50 MHz
   ret->radar_sensor_spi->begin();
@@ -221,14 +194,14 @@ BGT_status read_reg(BGT_ptr sensor, size_t const reg_addr)
   byte addr = (reg_addr << 1) & 0xFE;
 
   // SPI Read
-  digitalWrite(RSPI_CS, LOW);
+  digitalWrite(sensor->pin_cs, LOW);
 
   // Send address and read GSR0-Status-Register
   sensor->reg_data[0] = sensor->radar_sensor_spi->transfer(addr); 
   for (int i = 1; i < DATA_SIZE; i++) { // Read data
     sensor->reg_data[i] = sensor->radar_sensor_spi->transfer(0x00);
   }
-  digitalWrite(RSPI_CS, HIGH);
+  digitalWrite(sensor->pin_cs, HIGH);
 
   // Check if Error Occured
   if((sensor->reg_data[0] & 0x0F) != 0x0 
@@ -260,11 +233,11 @@ BGT_status write_reg(
   int_to_bytes(dataInt, dataToSend);
 
   // SPI Write
-  digitalWrite(RSPI_CS, LOW);
+  digitalWrite(sensor->pin_cs, LOW);
   for (int i = 0; i < DATA_SIZE; i++) {
     sensor->radar_sensor_spi->transfer(dataToSend[i]); // Write data
   }
-  digitalWrite(RSPI_CS, HIGH);
+  digitalWrite(sensor->pin_cs, HIGH);
   return BGT_status::BGT_success;
 }
 
@@ -399,7 +372,7 @@ BGT_status start_frame(BGT_ptr sensor)
 BGT_status read_fifo(BGT_ptr sensor)
 {
   // SPI Read
-  digitalWrite(RSPI_CS, LOW);
+  digitalWrite(sensor->pin_cs, LOW);
 
   for(int i = 0; i < DATA_SIZE; i++)
   {
@@ -420,7 +393,7 @@ BGT_status read_fifo(BGT_ptr sensor)
     sensor->data[i] = sensor->radar_sensor_spi->transfer(0x00);
   }
 
-  digitalWrite(RSPI_CS, HIGH);
+  digitalWrite(sensor->pin_cs, HIGH);
     
   return BGT_status::BGT_success;
 }

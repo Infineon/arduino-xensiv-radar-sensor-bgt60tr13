@@ -40,6 +40,7 @@ struct bgt60trxx_struct
     byte* data;
 
     SPIClass* radar_sensor_spi;
+    size_t pin_cs;
 
     // Chirp configuration
     size_t start_freq;
@@ -67,6 +68,8 @@ using BGT_ptr = bgt60trxx_struct * const;
 bgt60trxx_struct* init_struct(
     size_t const word_size, 
     voidFuncPtr interrupt_handler,
+    size_t pin_cs,
+    size_t pin_interrupt,
     SPIClass *spi_interface = &SPI
 );
 

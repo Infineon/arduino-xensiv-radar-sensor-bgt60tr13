@@ -32,10 +32,12 @@ static float range_resolution;
 #define RXRES_L   40
 
 #ifdef TARGET_APP_CY8CKIT_062S2_AI
-// The CY8CKIT-062S2-AI-Board uses the
-// class SPIClassPSOC to create a new SPI-Instance.
-// This way, we can wire the radar sensor directly
-// to the spi interface.
+/* 
+ * The CY8CKIT-062S2-AI-Board uses the
+ * class SPIClassPSOC to create a new SPI-Instance.
+ * This way, we can wire the radar sensor directly
+ * to the spi interface.
+ */
 static SPIClassPSOC spi_radar_interface = SPIClassPSOC(
   RSPI_MOSI, 
   RSPI_MISO, 
@@ -46,10 +48,10 @@ static SPIClassPSOC spi_radar_interface = SPIClassPSOC(
 static SPIClass* spi_interface = &spi_radar_interface;
 #else
 /*
-  When a different Board is used, the default SPI-Class
-  is used.
-  Change, when necessary.
-*/
+ * When a different Board is used, the default SPI-Class
+ * is used.
+ * Change, when necessary.
+ */
 static SPIClass* spi_interface = &SPI;
 #endif
 
@@ -130,8 +132,15 @@ void setup() {
   Serial.begin(115200);
 
   printf("> Serial Monitor enabled.");
+  
+  //Reset SPI-Interface
+  pinMode(RXRES_L, OUTPUT);
+  pinMode(RSPI_CS, OUTPUT);
+  digitalWrite(RSPI_CS, HIGH);
+  digitalWrite(RXRES_L, LOW);
+  digitalWrite(RXRES_L, HIGH);
 
-  bgt60trxx_sensor = init_struct(words, &interrupt_handler, spi_interface);
+  bgt60trxx_sensor = init_struct(words, &interrupt_handler, RSPI_CS, RXRES_L, spi_interface);
   if (!bgt60trxx_sensor) {
     Serial.println("Sensor initialization failed!");
     while (1);
