@@ -11,6 +11,13 @@ enum class BGT_status : uint8_t {
     BGT_success = 1
 };
 
+/** 
+ *   Redefine voidFuncPtr for
+ *   Boards, which don't implement
+ *   them.
+ */ 
+typedef void (*voidFuncPtr)();
+
 /**
  * @brief Overloaded operator to check if BGT_status is an error.
  */
@@ -32,7 +39,7 @@ struct bgt60trxx_struct
     voidFuncPtr interrupt_handler;
     byte* data;
 
-    arduino::HardwareSPI* radar_sensor_spi;
+    HardwareSPI* radar_sensor_spi;
 
     // Chirp configuration
     size_t start_freq;
