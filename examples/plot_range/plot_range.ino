@@ -70,9 +70,6 @@ void fft_to_dB(float * const fft_data, size_t const length) {
 void setup() {
   Serial.begin(115200);
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(USER_BUTTON, INPUT);
-
   bgt60trxx_sensor = init_struct(words, &interrupt_handler, spi_interface);
   if (!bgt60trxx_sensor) {
     Serial.println("Sensor initialization failed!");

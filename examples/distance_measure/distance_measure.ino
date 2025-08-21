@@ -125,9 +125,6 @@ void setup() {
 
   printf("> Serial Monitor enabled.");
 
-  pinMode(LED_BUILTIN, OUTPUT);
-  pinMode(USER_BUTTON, INPUT);
-
   bgt60trxx_sensor = init_struct(words, &interrupt_handler, spi_interface);
   if (!bgt60trxx_sensor) {
     Serial.println("Sensor initialization failed!");
