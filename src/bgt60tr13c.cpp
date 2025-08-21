@@ -1,4 +1,4 @@
-#include "api/HardwareSPI.h"
+#include <SPI.h>
 #include <Arduino.h>
 #include "bgt60tr13c.hpp"
 #include "pins_arduino.h"
