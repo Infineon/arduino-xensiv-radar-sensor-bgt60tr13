@@ -114,6 +114,14 @@ bgt60trxx_struct* init_struct(
   for(size_t i = 0; i < SIZE_REG_FILE; i++)
     (ret->register_values)[i] = init_register_list[i];
 
+    
+  //Init SPI-Interface
+  pinMode(pin_interrupt, OUTPUT);
+  pinMode(pin_cs, OUTPUT);
+  digitalWrite(pin_cs, HIGH);
+  digitalWrite(pin_interrupt, LOW);
+  digitalWrite(pin_interrupt, HIGH);
+
   ret->interrupt_handler = interrupt_handler;
   if(interrupt_handler != 0)
   {

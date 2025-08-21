@@ -66,6 +66,19 @@ const size_t ADC_DIV = 60;
 const size_t start_freq = 62500000;  // in kHz
 const size_t bandwidth  =  2000000;    // in kHz
 
+/*
+  Define the pins for the BGT60TR13C sensor.
+  The Board used is the Infineon CY8CKIT-062S2-AI.
+*/
+#define RSPI_MOSI 41
+#define RSPI_MISO 42
+#define RSPI_SCLK 43
+#define RSPI_CS   44
+#define RXRES_L   40
+
+// Change, when using different SPI-Interface
+static SPIClass* spi_interface = &SPI;
+
 /// initialise sensor struct
 bgt60trxx_struct* bgt60trxx_sensor;
 
@@ -73,7 +86,21 @@ void setup()
 {
     ...
     // initialize sensor
-    bgt60trxx_sensor = initStruct(words, (void*)interrupt_handler);
+    bgt60trxx_sensor = initStruct(
+        words, 
+        &interrupt_handler,
+        RSPI_CS, 
+        RXRES_L, 
+        spi_interface
+    );
+    
+    
+    //Init SPI-Interface
+    pinMode(RXRES_L, OUTPUT);
+    pinMode(RSPI_CS, OUTPUT);
+    digitalWrite(RSPI_CS, HIGH);
+    digitalWrite(RXRES_L, LOW);
+    digitalWrite(RXRES_L, HIGH);
     
     set_adc_div(bgt60trxx_sensor, ADC_DIV);
     set_chirp_len(bgt60trxx_sensor, samples_per_chirp);
