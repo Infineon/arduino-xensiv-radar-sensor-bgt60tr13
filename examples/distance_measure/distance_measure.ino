@@ -45,6 +45,11 @@ static SPIClassPSOC spi_radar_interface = SPIClassPSOC(
 );
 static SPIClass* spi_interface = &spi_radar_interface;
 #else
+/*
+  When a different Board is used, the default SPI-Class
+  is used.
+  Change, when necessary.
+*/
 static SPIClass* spi_interface = &SPI;
 #endif
 

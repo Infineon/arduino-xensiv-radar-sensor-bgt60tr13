@@ -43,6 +43,14 @@ which consist of 24 data bits
 - The chip returns an error when reading while the stack is full or empty
 - Data can be checked for overflow or underflow errors using the `checkData` function
 - Currently, only one of three receiver antennas are implemented.
+  
+> [!WARNING]  
+> This code was written for the CY8CKIT-062S2-AI Board, which uses
+> the SPIClassPSOC Class to define an SPI-Interface other than the
+> default SPI-Instance. If another Board is used and needs a different
+> SPI-interface than the default one, this needs to be implemented!
+>
+> Default when using another Board then the CY8CKIT-062S2-AI: Default SPI-Instance
 
 
 ### Example Code
