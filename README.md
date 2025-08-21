@@ -94,14 +94,6 @@ void setup()
         spi_interface
     );
     
-    
-    //Init SPI-Interface
-    pinMode(RXRES_L, OUTPUT);
-    pinMode(RSPI_CS, OUTPUT);
-    digitalWrite(RSPI_CS, HIGH);
-    digitalWrite(RXRES_L, LOW);
-    digitalWrite(RXRES_L, HIGH);
-    
     set_adc_div(bgt60trxx_sensor, ADC_DIV);
     set_chirp_len(bgt60trxx_sensor, samples_per_chirp);
     
