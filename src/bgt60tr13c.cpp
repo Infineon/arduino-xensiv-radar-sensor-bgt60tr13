@@ -1,29 +1,6 @@
 #include "bgt60tr13c.hpp"
 #include "pins_arduino.h"
 
-/*
-  Define pins for SPI communication,
-  when not already defined.
-*/
-#ifndef RSPI_MOSI
-  #define RSPI_MOSI 41
-#endif
-
-#ifndef RSPI_MISO
-  #define RSPI_MISO 42
-#endif
-
-#ifndef RSPI_SCLK
-  #define RSPI_SCLK 43
-#endif
-
-#ifndef RSPI_CS
-  #define RSPI_CS   44
-#endif
-
-#ifndef RXRES_L
-  #define RXRES_L   40
-#endif
 
 #define CHIP_FREQ 100000000
 
