@@ -50,6 +50,19 @@ void interrupt_handler() {
   Serial.println(">Interrupt Handler called");
 }
 
+#ifdef ARDUINO_FEATHER_ESP32
+/**
+ * Feather esp32 does not include the standard
+ * max function. So this function redifines it,
+ * so the file works for esp32 as well.
+ */
+template<class T, class L> 
+auto max(const T& a, const L& b) -> decltype((b < a) ? b : a)
+{
+  return (a < b) ? b : a;
+}
+#endif
+
 /**
  * @brief Converts FFT data to dB scale.
  * @param fft_data Pointer to the FFT data array.
