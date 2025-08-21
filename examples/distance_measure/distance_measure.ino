@@ -43,9 +43,9 @@ static SPIClassPSOC spi_radar_interface = SPIClassPSOC(
   NC, 
   false
 );
-static HardwareSPI* spi_interface = &spi_radar_interface;
+static SPIClass* spi_interface = &spi_radar_interface;
 #else
-static HardwareSPI* spi_interface = &SPI;
+static SPIClass* spi_interface = &SPI;
 #endif
 
 /**

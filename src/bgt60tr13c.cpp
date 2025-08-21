@@ -108,7 +108,7 @@ static const size_t skipFirstValues = 6;
 bgt60trxx_struct* init_struct(
   size_t const word_size, 
   voidFuncPtr interrupt_handler,
-  HardwareSPI *spi_interface
+  SPIClass *spi_interface
 )
 {
   bgt60trxx_struct* ret = (bgt60trxx_struct*) malloc(sizeof(bgt60trxx_struct));
