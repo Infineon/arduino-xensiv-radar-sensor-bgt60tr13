@@ -122,13 +122,6 @@ bgt60trxx_struct* init_struct(
     Serial.println("IRQ handler was set.");
   }
 
-  //Reset Device
-  pinMode(RXRES_L, OUTPUT);
-  pinMode(RSPI_CS, OUTPUT);
-  digitalWrite(RSPI_CS, HIGH);
-  digitalWrite(RXRES_L, LOW);
-  digitalWrite(RXRES_L, HIGH);
-
   ret->radar_sensor_spi = spi_interface;
   
   // Set SPI Interface with 50 MHz

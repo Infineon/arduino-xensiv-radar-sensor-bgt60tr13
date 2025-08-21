@@ -130,6 +130,13 @@ void setup() {
   Serial.begin(115200);
 
   printf("> Serial Monitor enabled.");
+  
+  //Reset SPI-Interface
+  pinMode(RXRES_L, OUTPUT);
+  pinMode(RSPI_CS, OUTPUT);
+  digitalWrite(RSPI_CS, HIGH);
+  digitalWrite(RXRES_L, LOW);
+  digitalWrite(RXRES_L, HIGH);
 
   bgt60trxx_sensor = init_struct(words, &interrupt_handler, spi_interface);
   if (!bgt60trxx_sensor) {
