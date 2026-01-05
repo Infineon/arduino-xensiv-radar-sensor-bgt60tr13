@@ -1,37 +1,8 @@
 #include "bgt60tr13c.hpp"
 #include "pins_arduino.h"
 
-
-#define CHIP_FREQ 100000000
-
 // local functions
 //===========================
-
-/**
- * @brief Sets specific bits in a register of the BGT sensor.
- * @param sensor Pointer to the sensor structure.
- * @param reg_addr The address of the register to modify.
- * @param bits The bits to set in the register.
- * @return BGT_status::BGT_success on success, BGT_status::BGT
- */
-BGT_status set_bits(BGT_ptr sensor, size_t const reg_addr, size_t const bits);
-
-/**
- * @brief Unpacks recorded ADC data into the real part of the FFT.
- * 
- *   Words (ADC) are represented in a byte array:
- *   a2 a1;  a0 b2;  b1 b0
- * 
- * @param sensor Pointer to the sensor structure.
- */
-BGT_status unpack_rec_data(BGT_ptr sensor);
-
-/**
- * @brief Runs a high-pass filter on the real part of the FFT data.
- * @param sensor Pointer to the sensor structure.
- * @return BGT_status::BGT_success on success, BGT_status::BGT
- */
-BGT_status run_highpass_filter(BGT_ptr sensor);
 
 /**
  * @brief Converts a 32-bit integer to a byte array.
@@ -40,23 +11,6 @@ BGT_status run_highpass_filter(BGT_ptr sensor);
  * @return BGT_status::BGT_success on success, BGT_status::BGT
  */
 BGT_status int_to_bytes(uint32_t data, byte* dataByte);
-
-/**
- * @brief Fetches data from the RegFile using a given address.
- * @param sensor Pointer to the sensor structure.
- * @param address The address to fetch data from.
- * @return The data fetched from the RegFile, or 0 if no entry exists.
- */
-size_t fetch_from_regFile(BGT_ptr sensor, size_t address);
-
-/**
- * @brief Writes data to the RegFile at a specified address.
- * @param sensor Pointer to the sensor structure.
- * @param address The address in the RegFile to write to.
- * @param data The data to write to the RegFile.
- * @return BGT_status::BGT_success on success, BGT_status::BGT
- */
-BGT_status write_to_regFile(BGT_ptr sensor, size_t address, size_t data);
 
 /**
  * @brief Converts a byte array to a 32-bit integer.
@@ -82,37 +36,34 @@ int bytes_to_int(byte const * const dataByte);
  */
 static const size_t skipFirstValues = 6;
 
-bgt60trxx_struct* init_struct(
+BGT60TRXX::BGT60TRXX(
   size_t const word_size, 
   voidFuncPtr interrupt_handler,
   size_t pin_cs,
   size_t pin_interrupt,
+  size_t board_freq,
   SPIClass *spi_interface
 )
 {
-  bgt60trxx_struct* ret = (bgt60trxx_struct*) malloc(sizeof(bgt60trxx_struct));
-  if(ret == 0) return 0;
-
-  ret->word_size = word_size;
-  ret->frame_size = (size_t)(((float)word_size)*1.5 + 0.5);
+  Serial.println("> Initalizing Sensor...");
+  this->word_size = word_size;
+  this->frame_size = (size_t)(((float)word_size)*1.5 + 0.5);
 
   //Check if fifo overflow would happen
-  if (ret->frame_size > (FIFO_SIZE_BYTE - skipFirstValues))
+  if (this->frame_size > (FIFO_SIZE_BYTE - skipFirstValues))
   {
-    free(ret); ret = nullptr;
-    return 0;
+    return;
   }  
-  ret->frame_size  += skipFirstValues;
+  this->frame_size  += skipFirstValues;
 
-  ret->data = (byte*) malloc(sizeof(byte)*(ret->frame_size));
-  if(ret->data == 0)
+  this->data = (byte*) malloc(sizeof(byte)*(this->frame_size));
+  if(this->data == 0)
   {
-    free(ret); ret = nullptr;
-    return 0;
+    return;
   }
 
   for(size_t i = 0; i < SIZE_REG_FILE; i++)
-    (ret->register_values)[i] = init_register_list[i];
+    (this->register_values)[i] = init_register_list[i];
 
     
   //Init SPI-Interface
@@ -122,7 +73,7 @@ bgt60trxx_struct* init_struct(
   digitalWrite(pin_interrupt, LOW);
   digitalWrite(pin_interrupt, HIGH);
 
-  ret->interrupt_handler = interrupt_handler;
+  this->interrupt_handler = interrupt_handler;
   if(interrupt_handler != 0)
   {
     // Set the IRQ handler
@@ -132,56 +83,54 @@ bgt60trxx_struct* init_struct(
     Serial.println("IRQ handler was set.");
   }
 
-  ret->radar_sensor_spi = spi_interface;
-  ret->pin_cs = pin_cs;
+  this->radar_sensor_spi = spi_interface;
+  this->pin_cs = pin_cs;
   
   // Set SPI Interface with 50 MHz
-  ret->radar_sensor_spi->begin();
-  ret->radar_sensor_spi->beginTransaction(
+  this->radar_sensor_spi->begin();
+  this->radar_sensor_spi->beginTransaction(
     SPISettings(50000000, MSBFIRST, SPI_MODE0)
   );
   
   //Chirp Configuration
-  ret->start_freq = (fetch_from_regFile(ret, PLL1_0_ADDR) 
+  this->start_freq = (fetch_from_regFile(PLL1_0_ADDR) 
                       & PLL1_0_FSU_MASK);
-  ret->clk_per_chirp = (fetch_from_regFile(ret, PLL1_2_ADDR) 
+  this->clk_per_chirp = (fetch_from_regFile(PLL1_2_ADDR) 
                       & PLL1_2_RTU_MASK);
-  ret->step_freq_chirp = (fetch_from_regFile(ret, PLL1_1_ADDR) 
+  this->step_freq_chirp = (fetch_from_regFile(PLL1_1_ADDR) 
                       & PLL1_1_RSU_MASK);
 
-  ret->adc_div = (fetch_from_regFile(ret, ADC0_ADDR) 
+  this->adc_div = (fetch_from_regFile(ADC0_ADDR) 
                     & ADC0_DIV_MASK) 
                   >> ADC0_DIV_OFFSET;
 
+  this->board_freq = board_freq;
+
   // FFT Config
-  ret->vReal = (float*) malloc(sizeof(float)*(ret->word_size));
-  ret->vImag = (float*) malloc(sizeof(float)*(ret->word_size));
-  ret->FFT = ArduinoFFT<float>(
-    ret->vReal, 
-    ret->vImag, 
-    ret->word_size, 
-    CHIP_FREQ / ret->adc_div
+  this->vReal = (float*) malloc(sizeof(float)*(this->word_size));
+  this->vImag = (float*) malloc(sizeof(float)*(this->word_size));
+  this->FFT = ArduinoFFT<float>(
+    this->vReal, 
+    this->vImag, 
+    this->word_size, 
+    this->board_freq / this->adc_div
   );
-
-  return ret;
 }
 
-BGT_status deinit_struct(BGT_ptr sensor)
+BGT60TRXX::~BGT60TRXX()
 {
-  free(sensor->vReal); sensor->vReal = nullptr;
-  free(sensor->vImag); sensor->vReal = nullptr;
-  free(sensor->data); sensor->data = nullptr;
-  free(sensor);
-  return BGT_status::BGT_success;
+  free(this->vReal); this->vReal = nullptr;
+  free(this->vImag); this->vReal = nullptr;
+  free(this->data); this->data = nullptr;
 }
 
-float get_range_resolution(BGT_const_ptr sensor)
+float BGT60TRXX::get_range_resolution()
 {
   static size_t f_adc_clk = 80; // in MHz
   static size_t step_chirp_divider = 8;
   
-  size_t RSU = sensor->step_freq_chirp;
-  size_t RTU = sensor->clk_per_chirp;
+  size_t RSU = this->step_freq_chirp;
+  size_t RTU = this->clk_per_chirp;
   
   float delta_f_RF = step_chirp_divider 
                       * f_adc_clk 
@@ -195,28 +144,28 @@ float get_range_resolution(BGT_const_ptr sensor)
   return c0 / (2 * bandwidth);
 }
 
-BGT_status read_reg(BGT_ptr sensor, size_t const reg_addr)
+BGT_status BGT60TRXX::read_reg(size_t const reg_addr)
 {
   // Only Address needs to be send
   // LSB = R/W = 0
   byte addr = (reg_addr << 1) & 0xFE;
 
   // SPI Read
-  digitalWrite(sensor->pin_cs, LOW);
+  digitalWrite(this->pin_cs, LOW);
 
   // Send address and read GSR0-Status-Register
-  sensor->reg_data[0] = sensor->radar_sensor_spi->transfer(addr); 
+  this->reg_data[0] = this->radar_sensor_spi->transfer(addr); 
   for (int i = 1; i < DATA_SIZE; i++) { // Read data
-    sensor->reg_data[i] = sensor->radar_sensor_spi->transfer(0x00);
+    this->reg_data[i] = this->radar_sensor_spi->transfer(0x00);
   }
-  digitalWrite(sensor->pin_cs, HIGH);
+  digitalWrite(this->pin_cs, HIGH);
 
   // Check if Error Occured
-  if((sensor->reg_data[0] & 0x0F) != 0x0 
-      and (sensor->reg_data[0] & 0x0F) != 0x4)
+  if((this->reg_data[0] & 0x0F) != 0x0 
+      and (this->reg_data[0] & 0x0F) != 0x4)
   {
     Serial.print("Status Register Error! GSR0 = ");
-    Serial.println(sensor->reg_data[0], HEX);
+    Serial.println(this->reg_data[0], HEX);
     return BGT_status::BGT_error;
   }
     
@@ -226,8 +175,7 @@ BGT_status read_reg(BGT_ptr sensor, size_t const reg_addr)
   return BGT_status::BGT_success;
 }
 
-BGT_status write_reg(
-  BGT_const_ptr sensor, 
+BGT_status BGT60TRXX::write_reg(
   size_t const reg_addr, 
   size_t const data
 )
@@ -241,43 +189,40 @@ BGT_status write_reg(
   int_to_bytes(dataInt, dataToSend);
 
   // SPI Write
-  digitalWrite(sensor->pin_cs, LOW);
+  digitalWrite(this->pin_cs, LOW);
   for (int i = 0; i < DATA_SIZE; i++) {
-    sensor->radar_sensor_spi->transfer(dataToSend[i]); // Write data
+    this->radar_sensor_spi->transfer(dataToSend[i]); // Write data
   }
-  digitalWrite(sensor->pin_cs, HIGH);
+  digitalWrite(this->pin_cs, HIGH);
   return BGT_status::BGT_success;
 }
 
-BGT_status set_adc_div(BGT_ptr sensor, size_t const data)
+BGT_status BGT60TRXX::set_adc_div(size_t const data)
 {
-  sensor->adc_div = data;
-  sensor->FFT = ArduinoFFT<float>(
-    sensor->vReal, 
-    sensor->vImag, 
-    sensor->word_size, 
-    CHIP_FREQ / sensor->adc_div
+  this->adc_div = data;
+  this->FFT = ArduinoFFT<float>(
+    this->vReal, 
+    this->vImag, 
+    this->word_size, 
+    this->board_freq / this->adc_div
   );
-  return set_init_value(sensor,
-                        data, 
+  return set_init_value(data, 
                         ADC0_ADDR, 
                         ADC0_DIV_MASK, 
                         ADC0_DIV_OFFSET);
 }
 
-BGT_status set_chirp_len(BGT_ptr sensor, size_t const chirp_len)
+BGT_status BGT60TRXX::set_chirp_len(size_t const chirp_len)
 {
-  return set_init_value(sensor,
-                        chirp_len, 
+  return set_init_value(chirp_len, 
                         PLL1_3_ADDR, 
                         APU0_MASK, 
                         APU0_OFFSET);
 }
 
-BGT_status configure_chirp(BGT_ptr sensor, size_t const N_FSU, size_t const N_RTU, size_t const N_RSU)
+BGT_status BGT60TRXX::configure_chirp(size_t const N_FSU, size_t const N_RTU, size_t const N_RSU)
 {
     if(!set_init_value(
-      sensor,
       N_FSU, 
       PLL1_0_ADDR, 
       PLL1_0_FSU_MASK, 
@@ -286,7 +231,6 @@ BGT_status configure_chirp(BGT_ptr sensor, size_t const N_FSU, size_t const N_RT
       return BGT_status::BGT_error;
                     
     if(!set_init_value(
-      sensor,
       N_RSU, 
       PLL1_1_ADDR, 
       PLL1_1_RSU_MASK, 
@@ -295,7 +239,6 @@ BGT_status configure_chirp(BGT_ptr sensor, size_t const N_FSU, size_t const N_RT
       return BGT_status::BGT_error;
 
     if(!set_init_value(
-      sensor,
       N_RTU, 
       PLL1_2_ADDR, 
       PLL1_2_RTU_MASK, 
@@ -304,55 +247,50 @@ BGT_status configure_chirp(BGT_ptr sensor, size_t const N_FSU, size_t const N_RT
       return BGT_status::BGT_error;
 
     // set values for range resoultion
-    sensor->start_freq = N_FSU;
-    sensor->step_freq_chirp = N_RSU;
-    sensor->clk_per_chirp = N_RTU;
+    this->start_freq = N_FSU;
+    this->step_freq_chirp = N_RSU;
+    this->clk_per_chirp = N_RTU;
 
     return BGT_status::BGT_success;
 }
 
-BGT_status set_vga_gain_ch1(BGT_ptr sensor, size_t const gain)
+BGT_status BGT60TRXX::set_vga_gain_ch1(size_t const gain)
 {
-  return set_init_value(sensor,
-                  gain, 
+  return set_init_value(gain, 
                   CSU1_2_ADDR, 
                   CSU1_2_VGA_GAIN1_MASK, 
                   CSU1_2_VGA_GAIN1_OFFSET);
 }
 
-BGT_status set_init_value(
-  BGT_ptr sensor, 
+BGT_status BGT60TRXX::set_init_value(
   size_t const data, 
   size_t const address, 
   size_t const reset_mask, 
   size_t const offset)
 {
-  size_t oldValue = fetch_from_regFile(sensor, address);
+  size_t oldValue = fetch_from_regFile(address);
   size_t newValue = (oldValue & ~reset_mask) | (data << offset);
 
-  if(!write_to_regFile(sensor, address, newValue))
+  if(!write_to_regFile(address, newValue))
     return BGT_status::BGT_error;
 
   return BGT_status::BGT_success;
 }
 
-BGT_status set_compare_value(
-  BGT_ptr sensor, 
+BGT_status BGT60TRXX::set_compare_value(
   size_t const compare_value
 )
 {
   if(compare_value >= 100)
   {
-    return set_init_value(sensor,
-                  FIFO_SIZE - 1, 
+    return set_init_value(FIFO_SIZE - 1, 
                   SFCTL_ADDR, 
                   SFCTL_FIFO_CREF_MASK, 
                   SFCTL_FIFO_CREF_OFFSET);
   }
   else
   {
-    return set_init_value(sensor,
-                  compare_value, 
+    return set_init_value(compare_value, 
                   SFCTL_ADDR, 
                   SFCTL_FIFO_CREF_MASK, 
                   SFCTL_FIFO_CREF_OFFSET);
@@ -360,75 +298,97 @@ BGT_status set_compare_value(
   return BGT_status::BGT_success;
 }
 
-BGT_status enable_testmode(BGT_ptr sensor)
+BGT_status BGT60TRXX::enable_testmode()
 {
-  if(!set_bits(sensor, SFCTL_ADDR, TEST_MODE_EN)) 
+  if(!set_bits(SFCTL_ADDR, TEST_MODE_EN)) 
     return BGT_status::BGT_error;
 
   // Init RFT0 Register
-  if(!set_bits(sensor, RFT0_ADDR, TEST_IF_ENABLE)) 
+  if(!set_bits(RFT0_ADDR, TEST_IF_ENABLE)) 
     return BGT_status::BGT_error;
 
-  return reset_FSM(sensor);
+  return reset_FSM();
 }
 
-BGT_status start_frame(BGT_ptr sensor)
+BGT_status BGT60TRXX::start_frame()
 {
-  return set_bits(sensor, MAIN_ADDR, START_FRAME);
+  return set_bits(MAIN_ADDR, START_FRAME);
 }
 
-BGT_status read_fifo(BGT_ptr sensor)
+BGT_status BGT60TRXX::read_fifo()
 {
   // SPI Read
-  digitalWrite(sensor->pin_cs, LOW);
+  digitalWrite(this->pin_cs, LOW);
 
   for(int i = 0; i < DATA_SIZE; i++)
   {
-    sensor->header_GSR0[i] = sensor->radar_sensor_spi->transfer(ENABLE_BURST_MODE[i]);
+    this->header_GSR0[i] = this->radar_sensor_spi->transfer(ENABLE_BURST_MODE[i]);
   }
   
   // Check if Error Occured
-  if((sensor->header_GSR0[DATA_SIZE-1] & 0x0F) != 0x0 
-    	and (sensor->header_GSR0[DATA_SIZE-1] & 0x0F) != 0x4)
+  if((this->header_GSR0[DATA_SIZE-1] & 0x0F) != 0x0 
+    	and (this->header_GSR0[DATA_SIZE-1] & 0x0F) != 0x4)
   {
     Serial.print("Status Register Error! GSR0 = ");
-    Serial.println(sensor->header_GSR0[DATA_SIZE-1], HEX);
+    Serial.println(this->header_GSR0[DATA_SIZE-1], HEX);
     return BGT_status::BGT_error;
   }
 
-  for(size_t i = 0; i < sensor->frame_size; i++)
+  for(size_t i = 0; i < this->frame_size; i++)
   {
-    sensor->data[i] = sensor->radar_sensor_spi->transfer(0x00);
+    this->data[i] = this->radar_sensor_spi->transfer(0x00);
   }
 
-  digitalWrite(sensor->pin_cs, HIGH);
+  digitalWrite(this->pin_cs, HIGH);
     
   return BGT_status::BGT_success;
 }
 
-BGT_status read_distance(BGT_ptr sensor)
+/**
+ * @brief Converts FFT data to dB scale.
+ * @param fft_data Pointer to the FFT data array.
+ * @param length Length of the FFT data array.
+ */
+void fft_to_dB(float * const fft_data, size_t const length) {
+  size_t i = 1;
+  while (i < length) {
+    // clip signal
+    if(fft_data[i] < 0.001)
+      fft_data[i] = 0.001;
+    // calculate to dB-Scale
+    fft_data[i] = (10.0 * log10(fft_data[i]));
+    i += 1;
+  }
+  fft_data[0] = 0;  // Remove DC-Value
+}
+
+BGT_status BGT60TRXX::read_distance()
 {
-  if(!read_fifo(sensor)) return BGT_status::BGT_error;
+  if(!read_fifo()) return BGT_status::BGT_error;
   
-  if(!unpack_rec_data(sensor)) return BGT_status::BGT_error;
-  if(!run_highpass_filter(sensor)) return BGT_status::BGT_error;
+  if(!unpack_rec_data()) return BGT_status::BGT_error;
+  if(!run_highpass_filter()) return BGT_status::BGT_error;
 
   // run FFT
-  sensor->FFT.compute(FFTDirection::Forward);
-  sensor->FFT.complexToMagnitude();
+  this->FFT.compute(FFTDirection::Forward);
+  this->FFT.complexToMagnitude();
+
+  fft_to_dB(this->vReal, this->word_size);
+  
+  if(!run_anti_coupling_filter()) return BGT_status::BGT_error;
     
   return BGT_status::BGT_success;
 }
 
-BGT_status init_sensor(BGT_ptr sensor)
+BGT_status BGT60TRXX::init_sensor()
 {
   for (int i = 0; i < SIZE_REG_FILE; i++) 
   {
-    reg_pair* current_reg = &((sensor->register_values)[i]);
+    reg_pair* current_reg = &((this->register_values)[i]);
     int data = current_reg->data;
     int addr = current_reg->addr;
 
-    if(!write_reg(sensor, addr, data)) 
+    if(!write_reg(addr, data)) 
     {
       return BGT_status::BGT_error;
     }
@@ -436,83 +396,61 @@ BGT_status init_sensor(BGT_ptr sensor)
   return BGT_status::BGT_success;
 }
 
-BGT_status reset_FIFO(BGT_ptr sensor)
+BGT_status BGT60TRXX::reset_FIFO()
 {
-  return set_bits(sensor, MAIN_ADDR, FIFO_RESET);
+  return set_bits(MAIN_ADDR, FIFO_RESET);
 }
 
-BGT_status reset_FSM(BGT_ptr sensor)
+BGT_status BGT60TRXX::reset_FSM()
 {
-  return set_bits(sensor, MAIN_ADDR, FSM_RESET);
+  return set_bits(MAIN_ADDR, FSM_RESET);
 }
 
-BGT_status reset(BGT_ptr sensor)
+BGT_status BGT60TRXX::reset()
 {
-  if(!write_reg(sensor, MAIN_ADDR, SOFT_RESET))
+  if(!write_reg(MAIN_ADDR, SOFT_RESET))
     return BGT_status::BGT_error;
 
   return BGT_status::BGT_success;
 }
 
-size_t calculate_RTU(size_t const adc_div, size_t const samples_per_chirp)
+size_t BGT60TRXX::calculate_RTU(size_t const adc_div, size_t const samples_per_chirp)
 {
   return ((size_t)((adc_div * samples_per_chirp)/8)) + T_SETUP;
 }
 
-size_t calculate_FSU(size_t const start_freq)
+size_t BGT60TRXX::calculate_FSU(size_t const start_freq)
 {
   // 24 bit two complement needed for sensor
   return size_t(pow(2,20) * ((((float)start_freq/640000))-96)) & 0xFFFFFF;
 }
 
-size_t calculate_RSU(size_t const bandwidth, size_t const RTU)
+size_t BGT60TRXX::calculate_RSU(size_t const bandwidth, size_t const RTU)
 {
   float dRF = bandwidth/(8*RTU);
   return size_t(pow(2,20) * dRF / 640000);
 }
 
-BGT_status check_data(float const* const data, size_t const length)
+BGT_status BGT60TRXX::set_bits(size_t const reg_addr, size_t const bits)
 {
-  size_t i = 0;
-  while (i < length)
-  {
-    if(data[i] == 0x00)
-    {
-      Serial.print("Underflow detected! At index");
-      Serial.println(i);
-      return BGT_status::BGT_error;
-    }
-    else if(data[i] == ~0x00)
-    {
-      Serial.print("Overflow detected! At index");
-      Serial.println(i);
-      return BGT_status::BGT_error;
-    }
-    i += 1;
-  }
-  return BGT_status::BGT_success;
-}
-
-BGT_status set_bits(BGT_ptr sensor, size_t const reg_addr, size_t const bits)
-{
-  if(!read_reg(sensor, reg_addr)) return BGT_status::BGT_error;
-  int data = bytes_to_int(sensor->reg_data) | bits;
-  if(!write_reg(sensor, reg_addr, data)) return BGT_status::BGT_error;
+  if(!read_reg(reg_addr)) return BGT_status::BGT_error;
+  int data = bytes_to_int(this->reg_data) | bits;
+  if(!write_reg(reg_addr, data)) return BGT_status::BGT_error;
 
   return BGT_status::BGT_success;
 }
 
-BGT_status unpack_rec_data(BGT_ptr sensor)
+BGT_status BGT60TRXX::unpack_rec_data()
 {
   size_t byte_index = skipFirstValues;
   size_t fft_index = 0;
-  size_t const len = sensor->frame_size;
+  size_t const len = this->frame_size;
   while (byte_index < len - 2)
   {
     // Extract 3 bytes from the byte array
-    byte byte1 = sensor->data[byte_index];
-    byte byte2 = sensor->data[byte_index + 1];
-    byte byte3 = sensor->data[byte_index + 2];
+    byte byte1 = this->data[byte_index];
+    byte byte2 = this->data[byte_index + 1];
+    byte byte3 = this->data[byte_index + 2];
     
     uint32_t a = ((((uint32_t)(byte1 & 0xFF)) << 4) 
               | (((uint32_t)(byte2 & 0xF0)) >> 4));
@@ -521,12 +459,12 @@ BGT_status unpack_rec_data(BGT_ptr sensor)
               | (((uint32_t)(byte3 & 0xFF)) >> 0));
 
     // Assign the 12-bit values to the real-register
-    sensor->vReal[fft_index] = (float) a;
-    sensor->vReal[fft_index + 1] = (float) b;
+    this->vReal[fft_index] = (float) a;
+    this->vReal[fft_index + 1] = (float) b;
 
     // reset imag-register
-    sensor->vImag[fft_index] = 0.0;
-    sensor->vImag[fft_index + 1] = 0.0;
+    this->vImag[fft_index] = 0.0;
+    this->vImag[fft_index + 1] = 0.0;
 
     fft_index += 2;
     byte_index += 3;
@@ -534,7 +472,74 @@ BGT_status unpack_rec_data(BGT_ptr sensor)
   return BGT_status::BGT_success;
 }
 
-BGT_status run_highpass_filter(BGT_ptr sensor)
+BGT_status BGT60TRXX::run_anti_coupling_filter()
+{
+  // Calculation: Typical: sig - mov_avg
+  // y[i] = x[i] - 1/N sum_(k = i - (N-1))^(i)(x[k])
+  // y[i] = (N-1)/N * x[i] - 1/N sum_(k = i - (N-1))^(i-1)(x[k])
+  // Meaning: b0 = (N-1)/N
+  // all other bx = -1/N
+  // For Decoupling we use a broad moving average to
+  // calculate reflections out: N=10
+  float x0 = 0.0, x1 = 0.0, x2 = 0.0, x3 = 0.0, x4 = 0.0, x5 = 0.0, x6 = 0.0, x7 = 0.0, x8 = 0.0, x9 = 0.0, y0 = 0.0;
+  int i = 0;
+  constexpr float bx = -0.1; // -1/N
+  constexpr float b0 = 0.9; // (N-1)/N
+  int limit = this->word_size;
+  while (i < limit)
+  {
+    x9 = x8;
+    x8 = x7;
+    x7 = x6;
+    x6 = x5;
+    x5 = x4;
+    x4 = x3;
+    x3 = x2;
+    x2 = x1;
+    x1 = x0;
+    x0 = this->vReal[i];
+    y0 = x0*b0 + x1*bx + x2*bx + x3*bx + x4*bx + x5*bx + x6*bx + x7*bx + x8*bx + x9*bx;
+    this->vReal[i] = y0;
+    i++;
+  }
+    
+  // Using the filter, reflections should be calculated out
+  // To remove coupling between Rx and Tx decrease the values from the first 3 values
+  int j = 0;
+  while(j < 3)
+  {
+    this->vReal[j] = 0.0;
+    j++;
+  }
+
+  // Nearer Targets get detected much better,
+  // but we want to have one threshold level to detect
+  // every value. Decreasing it using a linear function
+  // helps here
+  /*int n = 3; // start with 3, the other values cant be used anyways
+  limit = 9;
+  float k = 28.0; // Initial adjustment value
+  while (n < limit)
+  {
+    if (k > 0.0)
+    {
+      this->vReal[n] -= k;
+      k -= 3.0;
+    }
+    n++;
+  }*/
+  this->vReal[3] -= 28;
+  this->vReal[4] -= 26;
+  this->vReal[5] -= 19;
+  this->vReal[6] -= 12;
+  this->vReal[7] -= 11;
+  this->vReal[8] -= 4;
+    
+  return BGT_status::BGT_success;
+}
+
+
+BGT_status BGT60TRXX::run_highpass_filter()
 {
   // Coefficients for Chebyshev 2nd Order High-Pass Filter
   constexpr float b0 = 0.943;
@@ -552,16 +557,16 @@ BGT_status run_highpass_filter(BGT_ptr sensor)
   float y1 = 0.0;
   float y2 = 0.0;
   size_t i = 0;
-  size_t const limit = sensor->word_size;
+  size_t const limit = this->word_size;
   while (i < limit)
   {
     x2 = x1;
     x1 = x0;
-    x0 = sensor->vReal[i];
+    x0 = this->vReal[i];
     y2 = y1;
     y1 = y0;
     y0 = x0*b0 + x1*b1 + x2*b2 + y1*a1 + y2*a2; 
-    sensor->vReal[i] = y0;
+    this->vReal[i] = y0;
     i += 1;
   }
   return BGT_status::BGT_success;
@@ -578,21 +583,21 @@ BGT_status int_to_bytes(uint32_t data, byte* dataByte)
   return BGT_status::BGT_success;
 }
 
-size_t fetch_from_regFile(BGT_ptr sensor, size_t address)
+size_t BGT60TRXX::fetch_from_regFile(size_t address)
 {
   for (int i = 0; i < SIZE_REG_FILE; i++) {
-    if(address == sensor->register_values[i].addr)
-      return sensor->register_values[i].data;
+    if(address == this->register_values[i].addr)
+      return this->register_values[i].data;
   }
   return 0;
 }
 
-BGT_status write_to_regFile(BGT_ptr sensor, size_t address, size_t data)
+BGT_status BGT60TRXX::write_to_regFile(size_t address, size_t data)
 {
   for (int i = 0; i < SIZE_REG_FILE; i++) {
-    if(address == sensor->register_values[i].addr)
+    if(address == this->register_values[i].addr)
     {
-      sensor->register_values[i].data = data;
+      this->register_values[i].data = data;
       return BGT_status::BGT_success;
     }
   }
@@ -610,12 +615,12 @@ int bytes_to_int(byte const * const dataByte)
   return data;
 }
 
-float* get_fft_data(BGT_const_ptr sensor)
+float* BGT60TRXX::get_fft_data()
 {
-  return sensor->vReal;
+  return this->vReal;
 }
 
-size_t get_fft_length(BGT_const_ptr sensor) 
+size_t BGT60TRXX::get_fft_length() 
 {
-  return sensor->word_size;
+  return this->word_size;
 }

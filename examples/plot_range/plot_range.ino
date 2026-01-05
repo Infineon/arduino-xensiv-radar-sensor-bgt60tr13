@@ -1,20 +1,19 @@
 #include <SPI.h>
 #include <time.h>
 #include "bgt60tr13c.hpp"
+#include <string.h>
 
 // const values
 static const size_t no_of_chirps = 1;
 static const size_t samples_per_chirp = 128;
 static const size_t words = samples_per_chirp * no_of_chirps;
 static const size_t ADC_DIV = 60;
-static const size_t start_freq = 62500000;  // in kHz
-static const size_t bandwidth  =  2000000;    // in kHz
-
-static bgt60trxx_struct* bgt60trxx_sensor;
-
-static float fft_data[words / 2];
+static const size_t start_freq = 58000000;  // in kHz
+static const size_t bandwidth  =  4500000;    // in kHz
 
 static float range_resolution;
+
+static float threshold = 3.0;
 
 /*
   Define the pins for the BGT60TR13C sensor.
@@ -25,6 +24,8 @@ static float range_resolution;
 #define RSPI_SCLK 43
 #define RSPI_CS   44
 #define RXRES_L   40
+
+#define CHIP_FREQ 100000000
 
 #ifdef TARGET_APP_CY8CKIT_062S2_AI
 // The CY8CKIT-062S2-AI-Board uses the
@@ -48,49 +49,36 @@ static SPIClass* spi_interface = &spi_radar_interface;
 static SPIClass* spi_interface = &SPI;
 #endif
 
+
+/**
+  * @brief Handels float to string conversion for print
+  */
+String ftos(float const value);
+
 /**
  * @brief Interrupt handler function.
  */
-void interrupt_handler() {
+void interrupt_handler() 
+{
   Serial.println(">Interrupt Handler called");
 }
 
-/**
- * @brief Converts FFT data to dB scale.
- * @param fft_data Pointer to the FFT data array.
- * @param length Length of the FFT data array.
- */
-void fft_to_dB(float * const fft_data, size_t const length) {
-  size_t i = 1;
-  while (i < length) {
-    // clip signal
-    if(fft_data[i] < 0.001)
-      fft_data[i] = 0.001;
-    // calculate to dB-Scale
-    fft_data[i] = (10.0 * log10(fft_data[i]));
-    i += 1;
-  }
-  fft_data[0] = 0;  // Remove DC-Value
-}
-
-void setup() {
+BGT60TRXX* sensor = nullptr;
+void setup() 
+{
   Serial.begin(115200);
 
-  bgt60trxx_sensor = init_struct(words, &interrupt_handler, RSPI_CS, RXRES_L, spi_interface);
-  if (!bgt60trxx_sensor) {
-    Serial.println("Sensor initialization failed!");
-    while (1);
-  }
+  sensor = new BGT60TRXX(words, &interrupt_handler, RSPI_CS, RXRES_L, CHIP_FREQ, spi_interface);
 
   Serial.println("> Reset Sensor...");
-  reset(bgt60trxx_sensor);
+  sensor->reset();
 
-  set_adc_div(bgt60trxx_sensor, ADC_DIV);
-  set_chirp_len(bgt60trxx_sensor, samples_per_chirp);
+  sensor->set_adc_div(ADC_DIV);
+  sensor->set_chirp_len(samples_per_chirp);
 
-  size_t FSU = calculate_FSU(start_freq);
-  size_t RTU = calculate_RTU(ADC_DIV, samples_per_chirp);
-  size_t RSU = calculate_RSU(bandwidth, RTU);
+  size_t FSU = sensor->calculate_FSU(start_freq);
+  size_t RTU = sensor->calculate_RTU(ADC_DIV, samples_per_chirp);
+  size_t RSU = sensor->calculate_RSU(bandwidth, RTU);
   
   Serial.print("> FSU = ");
   Serial.println(FSU);
@@ -101,50 +89,58 @@ void setup() {
   Serial.print("> RSU = ");
   Serial.println(RSU);
 
-  configure_chirp(bgt60trxx_sensor, FSU, RTU, RSU);
+  sensor->configure_chirp(FSU, RTU, RSU);
 
-  set_vga_gain_ch1(bgt60trxx_sensor, 3);
+  sensor->set_vga_gain_ch1(3);
 
-  init_sensor(bgt60trxx_sensor);
+  sensor->init_sensor();
   Serial.println("> Sensor initialised!");
   
-  range_resolution = get_range_resolution(bgt60trxx_sensor) * 100;  // in cm
+  range_resolution = sensor->get_range_resolution() * 100;  // in cm
   Serial.print("> Range resoultion is = ");
   Serial.println(range_resolution);
   
-  start_frame(bgt60trxx_sensor);
+  sensor->start_frame();
 }
 
-void loop() {
-  unsigned long startTime = millis();
-  read_distance(bgt60trxx_sensor);
-  unsigned long elapsedTime = millis() - startTime;
-
-  Serial.print(">Function readFIFO Time [ms] = ");
-  Serial.println(elapsedTime);
+void loop() 
+{
+  sensor->read_distance();
   
-  size_t const len = get_fft_length(bgt60trxx_sensor);
-  float* fft_measured_data = get_fft_data(bgt60trxx_sensor);
+  size_t const len = sensor->get_fft_length();
+  float* fft_measured_data = sensor->get_fft_data();
 
-  // divide by 2 -> removes duplication spectrum
+  // Only us length/2 -> removes duplication spectrum
+  String data_output = "fft;";
+  String threshold_output = "threshold;";
   for (size_t i = 0; i < len / 2; i++) {
-    fft_data[i] = fft_measured_data[i];
+      double distance = i * range_resolution / no_of_chirps;
+      data_output += ftos(distance) + "," + ftos(fft_measured_data[i]) + ";";
+      threshold_output += ftos(distance) + "," + ftos(threshold) + ";";
   }
 
-  // transform data to db-scale
-  fft_to_dB(fft_data, len / 2);
+  // send special string to now plot a signal
+  Serial.println(data_output);
 
-  for (size_t i = 0; i < len / 2; i++) {
-    double distance = i * range_resolution / no_of_chirps;
-    Serial.print(distance);
-    Serial.print(",");
-    Serial.print(fft_data[i]);
-    Serial.print(";");
-  }
-  Serial.println("");
+  // send special string to now plot threshold
+  Serial.println(threshold_output);
 
   delay(100);
   
-  reset_FIFO(bgt60trxx_sensor);
-  start_frame(bgt60trxx_sensor);
+  sensor->reset_FIFO();
+  sensor->start_frame();
+}
+
+String ftos(float const value) 
+{
+    static int const buffer_size = 16;
+    static char buffer[buffer_size];
+
+    int front = (int)value;
+    int back = (int)(abs(value-1.0*front)*100);
+    
+    // Format the string
+    snprintf(buffer, buffer_size, "%d.%d", front, back);
+
+    return String(buffer);
 }
