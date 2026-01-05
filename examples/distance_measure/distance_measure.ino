@@ -9,7 +9,7 @@ static const size_t ADC_DIV = 60;
 static const size_t start_freq = 58000000;  // in kHz
 static const size_t bandwidth  =  4500000;    // in kHz
 
-static const float threshold = 3.0;
+static const float threshold = 2.1;
 
 static float range_resolution;
 
@@ -68,14 +68,15 @@ void interrupt_handler() {
  * 
  * @param signal Pointer to the signal data.
  */
-void find_nearest_peak(float const * const signal)
+void detect_nearest_target(float const * const signal)
 {
   for(size_t i = 1; i < words/2 - 1; i++)
   {
     if (signal[i] > threshold)
     {
+      float distance_cm = calculate_range_from_index(i, range_resolution) * 100.0 / no_of_chirps;
       Serial.print(">Peak detected at: ");
-      Serial.print(i*range_resolution / no_of_chirps);
+      Serial.print(distance_cm);
       Serial.println("cm");
       return;
     }
@@ -110,14 +111,15 @@ void setup() {
 
   sensor->configure_chirp(FSU, RTU, RSU);
 
-  sensor->set_vga_gain_ch1(3);
+  sensor->set_vga_gain(1, 3);
 
   sensor->init_sensor();
   Serial.println("> Sensor initialised!");
   
-  range_resolution = sensor->get_range_resolution() * 100;  // in cm
-  Serial.print("> Range resoultion is = ");
-  Serial.println(range_resolution);
+  range_resolution = sensor->get_range_resolution();  // in meters
+  Serial.print("> Range resolution is = ");
+  Serial.print(range_resolution * 100);
+  Serial.println(" cm");
   
   sensor->start_frame();
 }
@@ -127,10 +129,10 @@ void loop() {
   
   float* fft_measured_data = sensor->get_fft_data();
 
-  find_nearest_peak(fft_measured_data);
+  detect_nearest_target(fft_measured_data);
 
   delay(100);
   
-  sensor->reset_FIFO();
+  sensor->reset_fifo();
   sensor->start_frame();
 }

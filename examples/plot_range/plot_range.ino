@@ -13,7 +13,7 @@ static const size_t bandwidth  =  4500000;    // in kHz
 
 static float range_resolution;
 
-static float threshold = 3.0;
+static float threshold = 2.1;
 
 /*
   Define the pins for the BGT60TR13C sensor.
@@ -91,14 +91,15 @@ void setup()
 
   sensor->configure_chirp(FSU, RTU, RSU);
 
-  sensor->set_vga_gain_ch1(3);
+  sensor->set_vga_gain(1, 3);
 
   sensor->init_sensor();
   Serial.println("> Sensor initialised!");
   
-  range_resolution = sensor->get_range_resolution() * 100;  // in cm
-  Serial.print("> Range resoultion is = ");
-  Serial.println(range_resolution);
+  range_resolution = sensor->get_range_resolution();  // in meters
+  Serial.print("> Range resolution is = ");
+  Serial.print(range_resolution * 100);
+  Serial.println(" cm");
   
   sensor->start_frame();
 }
@@ -114,9 +115,9 @@ void loop()
   String data_output = "fft;";
   String threshold_output = "threshold;";
   for (size_t i = 0; i < len / 2; i++) {
-      double distance = i * range_resolution / no_of_chirps;
-      data_output += ftos(distance) + "," + ftos(fft_measured_data[i]) + ";";
-      threshold_output += ftos(distance) + "," + ftos(threshold) + ";";
+      float distance_cm = calculate_range_from_index(i, range_resolution) * 100.0 / no_of_chirps;
+      data_output += ftos(distance_cm) + "," + ftos(fft_measured_data[i]) + ";";
+      threshold_output += ftos(distance_cm) + "," + ftos(threshold) + ";";
   }
 
   // send special string to now plot a signal
@@ -127,7 +128,7 @@ void loop()
 
   delay(100);
   
-  sensor->reset_FIFO();
+  sensor->reset_fifo();
   sensor->start_frame();
 }
 

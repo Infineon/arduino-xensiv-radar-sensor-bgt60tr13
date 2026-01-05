@@ -36,6 +36,30 @@ int bytes_to_int(byte const * const dataByte);
  */
 static const size_t skipFirstValues = 6;
 
+
+void BGT60TRXX::_setup_interrupt(size_t const pin, voidFuncPtr handler)
+{
+  this->interrupt_handler = interrupt_handler;
+  if(interrupt_handler != 0)
+  {
+    // Set the IRQ handler
+    attachInterrupt(digitalPinToInterrupt(pin), handler, RISING);
+
+    // Print a message to indicate that the IRQ handler has been set
+    Serial.println("IRQ handler was set.");
+  }
+}
+
+void BGT60TRXX::_cache_chirp_config()
+{
+  this->start_freq = (fetch_from_regFile(PLL1_0_ADDR) 
+                      & PLL1_0_FSU_MASK);
+  this->clk_per_chirp = (fetch_from_regFile(PLL1_2_ADDR) 
+                      & PLL1_2_RTU_MASK);
+  this->step_freq_chirp = (fetch_from_regFile(PLL1_1_ADDR) 
+                      & PLL1_1_RSU_MASK);
+}
+
 BGT60TRXX::BGT60TRXX(
   size_t const word_size, 
   voidFuncPtr interrupt_handler,
@@ -64,7 +88,6 @@ BGT60TRXX::BGT60TRXX(
 
   for(size_t i = 0; i < SIZE_REG_FILE; i++)
     (this->register_values)[i] = init_register_list[i];
-
     
   //Init SPI-Interface
   pinMode(pin_interrupt, OUTPUT);
@@ -73,15 +96,7 @@ BGT60TRXX::BGT60TRXX(
   digitalWrite(pin_interrupt, LOW);
   digitalWrite(pin_interrupt, HIGH);
 
-  this->interrupt_handler = interrupt_handler;
-  if(interrupt_handler != 0)
-  {
-    // Set the IRQ handler
-    attachInterrupt(digitalPinToInterrupt(pin_interrupt), interrupt_handler, RISING);
-
-    // Print a message to indicate that the IRQ handler has been set
-    Serial.println("IRQ handler was set.");
-  }
+  _setup_interrupt(pin_interrupt, interrupt_handler);
 
   this->radar_sensor_spi = spi_interface;
   this->pin_cs = pin_cs;
@@ -93,13 +108,8 @@ BGT60TRXX::BGT60TRXX(
   );
   
   //Chirp Configuration
-  this->start_freq = (fetch_from_regFile(PLL1_0_ADDR) 
-                      & PLL1_0_FSU_MASK);
-  this->clk_per_chirp = (fetch_from_regFile(PLL1_2_ADDR) 
-                      & PLL1_2_RTU_MASK);
-  this->step_freq_chirp = (fetch_from_regFile(PLL1_1_ADDR) 
-                      & PLL1_1_RSU_MASK);
-
+  _cache_chirp_config();
+  
   this->adc_div = (fetch_from_regFile(ADC0_ADDR) 
                     & ADC0_DIV_MASK) 
                   >> ADC0_DIV_OFFSET;
@@ -120,28 +130,23 @@ BGT60TRXX::BGT60TRXX(
 BGT60TRXX::~BGT60TRXX()
 {
   free(this->vReal); this->vReal = nullptr;
-  free(this->vImag); this->vReal = nullptr;
+  free(this->vImag); this->vImag = nullptr;
   free(this->data); this->data = nullptr;
 }
-
+    
 float BGT60TRXX::get_range_resolution()
 {
-  static size_t f_adc_clk = 80; // in MHz
-  static size_t step_chirp_divider = 8;
-  
   size_t RSU = this->step_freq_chirp;
   size_t RTU = this->clk_per_chirp;
   
-  float delta_f_RF = step_chirp_divider 
-                      * f_adc_clk 
+  float delta_f_RF = STEP_CHIRP_DIVIDER 
+                      * F_ADC_CLK 
                       * (((float)RSU) / pow(2,20));
-
-  static size_t c0 = 300; // in Mm/s
 
   // Multiply with 8! -> See Datasheet BGT60TRXX P.56 RTU
   float bandwidth = (RTU * 8) * delta_f_RF;
 
-  return c0 / (2 * bandwidth);
+  return SPEED_OF_LIGHT / (2.0f * bandwidth);
 }
 
 BGT_status BGT60TRXX::read_reg(size_t const reg_addr)
@@ -206,7 +211,7 @@ BGT_status BGT60TRXX::set_adc_div(size_t const data)
     this->word_size, 
     this->board_freq / this->adc_div
   );
-  return set_init_value(data, 
+  return update_register_field(data, 
                         ADC0_ADDR, 
                         ADC0_DIV_MASK, 
                         ADC0_DIV_OFFSET);
@@ -214,7 +219,7 @@ BGT_status BGT60TRXX::set_adc_div(size_t const data)
 
 BGT_status BGT60TRXX::set_chirp_len(size_t const chirp_len)
 {
-  return set_init_value(chirp_len, 
+  return update_register_field(chirp_len, 
                         PLL1_3_ADDR, 
                         APU0_MASK, 
                         APU0_OFFSET);
@@ -222,7 +227,7 @@ BGT_status BGT60TRXX::set_chirp_len(size_t const chirp_len)
 
 BGT_status BGT60TRXX::configure_chirp(size_t const N_FSU, size_t const N_RTU, size_t const N_RSU)
 {
-    if(!set_init_value(
+    if(!update_register_field(
       N_FSU, 
       PLL1_0_ADDR, 
       PLL1_0_FSU_MASK, 
@@ -230,7 +235,7 @@ BGT_status BGT60TRXX::configure_chirp(size_t const N_FSU, size_t const N_RTU, si
     )
       return BGT_status::BGT_error;
                     
-    if(!set_init_value(
+    if(!update_register_field(
       N_RSU, 
       PLL1_1_ADDR, 
       PLL1_1_RSU_MASK, 
@@ -238,7 +243,7 @@ BGT_status BGT60TRXX::configure_chirp(size_t const N_FSU, size_t const N_RTU, si
     )
       return BGT_status::BGT_error;
 
-    if(!set_init_value(
+    if(!update_register_field(
       N_RTU, 
       PLL1_2_ADDR, 
       PLL1_2_RTU_MASK, 
@@ -253,16 +258,17 @@ BGT_status BGT60TRXX::configure_chirp(size_t const N_FSU, size_t const N_RTU, si
 
     return BGT_status::BGT_success;
 }
-
-BGT_status BGT60TRXX::set_vga_gain_ch1(size_t const gain)
+BGT_status BGT60TRXX::set_vga_gain(size_t const channel, size_t const gain)
 {
-  return set_init_value(gain, 
-                  CSU1_2_ADDR, 
-                  CSU1_2_VGA_GAIN1_MASK, 
-                  CSU1_2_VGA_GAIN1_OFFSET);
+    switch(channel) {
+        case 1: return update_register_field(gain, CSU1_2_ADDR, CSU1_2_VGA_GAIN1_MASK, CSU1_2_VGA_GAIN1_OFFSET);
+        case 2: return update_register_field(gain, CSU1_2_ADDR, CSU1_2_VGA_GAIN2_MASK, CSU1_2_VGA_GAIN2_OFFSET);
+        case 3: return update_register_field(gain, CSU1_2_ADDR, CSU1_2_VGA_GAIN3_MASK, CSU1_2_VGA_GAIN3_OFFSET);
+        default: return BGT_status::BGT_error;
+    }
 }
 
-BGT_status BGT60TRXX::set_init_value(
+BGT_status BGT60TRXX::update_register_field(
   size_t const data, 
   size_t const address, 
   size_t const reset_mask, 
@@ -281,24 +287,14 @@ BGT_status BGT60TRXX::set_compare_value(
   size_t const compare_value
 )
 {
-  if(compare_value >= 100)
-  {
-    return set_init_value(FIFO_SIZE - 1, 
-                  SFCTL_ADDR, 
-                  SFCTL_FIFO_CREF_MASK, 
-                  SFCTL_FIFO_CREF_OFFSET);
-  }
-  else
-  {
-    return set_init_value(compare_value, 
-                  SFCTL_ADDR, 
-                  SFCTL_FIFO_CREF_MASK, 
-                  SFCTL_FIFO_CREF_OFFSET);
-  }
-  return BGT_status::BGT_success;
+  size_t value = (compare_value >= 100) ? (FIFO_SIZE - 1) : compare_value;
+  return update_register_field(value, 
+                SFCTL_ADDR, 
+                SFCTL_FIFO_CREF_MASK, 
+                SFCTL_FIFO_CREF_OFFSET);
 }
 
-BGT_status BGT60TRXX::enable_testmode()
+BGT_status BGT60TRXX::enable_test_mode()
 {
   if(!set_bits(SFCTL_ADDR, TEST_MODE_EN)) 
     return BGT_status::BGT_error;
@@ -307,7 +303,7 @@ BGT_status BGT60TRXX::enable_testmode()
   if(!set_bits(RFT0_ADDR, TEST_IF_ENABLE)) 
     return BGT_status::BGT_error;
 
-  return reset_FSM();
+  return reset_fsm();
 }
 
 BGT_status BGT60TRXX::start_frame()
@@ -349,7 +345,7 @@ BGT_status BGT60TRXX::read_fifo()
  * @param fft_data Pointer to the FFT data array.
  * @param length Length of the FFT data array.
  */
-void fft_to_dB(float * const fft_data, size_t const length) {
+void convert_to_db(float * const fft_data, size_t const length) {
   size_t i = 1;
   while (i < length) {
     // clip signal
@@ -366,16 +362,16 @@ BGT_status BGT60TRXX::read_distance()
 {
   if(!read_fifo()) return BGT_status::BGT_error;
   
-  if(!unpack_rec_data()) return BGT_status::BGT_error;
-  if(!run_highpass_filter()) return BGT_status::BGT_error;
+  if(!unpack_adc_data()) return BGT_status::BGT_error;
+  if(!apply_highpass_filter()) return BGT_status::BGT_error;
 
   // run FFT
   this->FFT.compute(FFTDirection::Forward);
   this->FFT.complexToMagnitude();
 
-  fft_to_dB(this->vReal, this->word_size);
+  convert_to_db(this->vReal, this->word_size);
   
-  if(!run_anti_coupling_filter()) return BGT_status::BGT_error;
+  if(!apply_anti_coupling_filter()) return BGT_status::BGT_error;
     
   return BGT_status::BGT_success;
 }
@@ -396,22 +392,19 @@ BGT_status BGT60TRXX::init_sensor()
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::reset_FIFO()
+BGT_status BGT60TRXX::reset_fifo()
 {
   return set_bits(MAIN_ADDR, FIFO_RESET);
 }
 
-BGT_status BGT60TRXX::reset_FSM()
+BGT_status BGT60TRXX::reset_fsm()
 {
   return set_bits(MAIN_ADDR, FSM_RESET);
 }
 
 BGT_status BGT60TRXX::reset()
 {
-  if(!write_reg(MAIN_ADDR, SOFT_RESET))
-    return BGT_status::BGT_error;
-
-  return BGT_status::BGT_success;
+  return write_reg(MAIN_ADDR, SOFT_RESET);
 }
 
 size_t BGT60TRXX::calculate_RTU(size_t const adc_div, size_t const samples_per_chirp)
@@ -440,7 +433,7 @@ BGT_status BGT60TRXX::set_bits(size_t const reg_addr, size_t const bits)
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::unpack_rec_data()
+BGT_status BGT60TRXX::unpack_adc_data()
 {
   size_t byte_index = skipFirstValues;
   size_t fft_index = 0;
@@ -472,7 +465,7 @@ BGT_status BGT60TRXX::unpack_rec_data()
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::run_anti_coupling_filter()
+BGT_status BGT60TRXX::apply_anti_coupling_filter()
 {
   // Calculation: Typical: sig - mov_avg
   // y[i] = x[i] - 1/N sum_(k = i - (N-1))^(i)(x[k])
@@ -539,7 +532,7 @@ BGT_status BGT60TRXX::run_anti_coupling_filter()
 }
 
 
-BGT_status BGT60TRXX::run_highpass_filter()
+BGT_status BGT60TRXX::apply_highpass_filter()
 {
   // Coefficients for Chebyshev 2nd Order High-Pass Filter
   constexpr float b0 = 0.943;
@@ -623,4 +616,9 @@ float* BGT60TRXX::get_fft_data()
 size_t BGT60TRXX::get_fft_length() 
 {
   return this->word_size;
+}
+
+float calculate_range_from_index(int index, float range_resolution)
+{
+  return index * range_resolution;
 }

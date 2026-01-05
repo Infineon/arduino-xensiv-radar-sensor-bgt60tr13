@@ -31,17 +31,26 @@ inline bool operator!(BGT_status status) {
 class BGT60TRXX
 {
 private:
-    // sensor data
-    size_t word_size;
-    size_t frame_size;
-    byte header_GSR0[DATA_SIZE];
-    byte reg_data[DATA_SIZE];
-    reg_file register_values;
-    voidFuncPtr interrupt_handler;
-    byte* data;
-
+    // SPI Interface
+    //==============================
     SPIClass* radar_sensor_spi;
     size_t pin_cs;
+    
+    // Transfer of SPI Interface
+    //============================
+    size_t word_size;
+    size_t frame_size;
+    
+    // Buffers for performance
+    byte header_GSR0[DATA_SIZE];
+    byte reg_data[DATA_SIZE];
+    byte* data;
+    
+    // Load default register configuration
+    reg_file register_values;
+
+    // Interrupt Handler
+    voidFuncPtr interrupt_handler;
 
     // Chirp configuration
     size_t start_freq;
@@ -56,7 +65,20 @@ private:
 
     size_t board_freq;
 
+    // ==========================
     // private helper functions
+    // ==========================
+    
+    /**
+     * @brief Sets up the interrupt pin and handler.
+     * @param pin The pin number for the interrupt.
+     */
+    void _setup_interrupt(size_t const pin, voidFuncPtr handler);
+    
+    /**
+      * @brief Caches the chirp configuration from the register file.
+      */
+    void _cache_chirp_config();
     
     /**
     * @brief Fetches data from the RegFile using a given address.
@@ -88,19 +110,19 @@ private:
     *   a2 a1;  a0 b2;  b1 b0
     * @return BGT_status::BGT_success on success, BGT_status::BGT
     */
-    BGT_status unpack_rec_data();
+    BGT_status unpack_adc_data();
 
     /**
     * @brief Runs a high-pass filter on the real part of the FFT data.
     * @return BGT_status::BGT_success on success, BGT_status::BGT
     */
-    BGT_status run_highpass_filter();
+    BGT_status apply_highpass_filter();
 
     /**
     * @brief Anti Coupling filter for Reciever/Transmitter Antenna
     * @return BGT_status::BGT_success on success, BGT_status::BGT
     */
-    BGT_status run_anti_coupling_filter();
+    BGT_status apply_anti_coupling_filter();
 
 
 
@@ -198,12 +220,13 @@ public:
     );
 
     /**
-    * Sets the VGA gain for channel 1 of the sensor.
+    * Sets the VGA gain for a specific channel.
     * Only enabled with init_sensor method.
     * @param gain The gain value to set (0-5).
+    * @param channel The channel number to set the gain for (1-3).
     * @return BGT_success on success, BGT_error on failure.
     */
-    BGT_status set_vga_gain_ch1(size_t const gain);
+    BGT_status set_vga_gain(size_t const channel, size_t const gain);
 
     /**
     * Sets register values for sensor.
@@ -214,7 +237,7 @@ public:
     * @param offset The offset for the data in the register.
     * @return BGT_success on success, BGT_error on failure.
     */
-    BGT_status set_init_value(
+    BGT_status update_register_field(
         size_t const data, 
         size_t const address, 
         size_t const reset_mask, 
@@ -234,7 +257,7 @@ public:
     * Enables the test mode (LFSR Enable) for the sensor.
     * @return BGT_success on success, BGT_error on failure.
     */
-    BGT_status enable_testmode();
+    BGT_status enable_test_mode();
 
     /**
     * Starts the frame generation for the sensor.
@@ -270,13 +293,13 @@ public:
     * Resets the FIFO and FSM of the sensor.
     * @return BGT_success on success, BGT_error on failure.
     */
-    BGT_status reset_FIFO();
+    BGT_status reset_fifo();
 
     /**
     * Resets the FSM of the sensor.
     * @return BGT_success on success, BGT_error on failure.
     */
-    BGT_status reset_FSM();
+    BGT_status reset_fsm();
 
     /**
     * This function resets the sensor's state, FIFO, and FSM.
@@ -311,15 +334,6 @@ public:
     size_t calculate_RSU(size_t const bandwidth, size_t const RTU);
 
     /**
-    * Checks the data for overflow and underflow conditions.
-    * This function iterates through the data array and checks for any anomalies.
-    * @param data Pointer to the data array.
-    * @param length The length of the data array.
-    * @return BGT_success if no errors are found, BGT_error if errors are detected.
-    */
-    BGT_status check_data(float const* const data, size_t const length);
-
-    /**
     * @brief Gets the FFT data calculated from the sensor.
     * @return Pointer to the FFT data array.
     */
@@ -331,6 +345,14 @@ public:
     */
     size_t get_fft_length();
 };
+
+/**
+* @brief Converts FFT bin index to physical range.
+* @param index FFT bin index.
+* @param range_resolution Range resolution in meters (from get_range_resolution).
+* @return Range in meters.
+*/
+float calculate_range_from_index(int index, float range_resolution);
 
 
 #endif // BGT60TRXX_LIB_HPP

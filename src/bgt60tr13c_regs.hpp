@@ -1,10 +1,16 @@
+// ================================================
+// Defines const values needed for BGT60TRXX Sensor
+// Samuel Weissenbacher, 08.2025
+// ================================================
+
 #ifndef BGT60TR13C_DEFINE_HPP
 #define BGT60TR13C_DEFINE_HPP
 
-// Register Mask and Offset Values
+// ===========================
+// Register Mask and Offsets
+// ===========================
 #define ADDR_MASK                (0xFE000000)
 #define ADDR_OFFSET              (25)
-
 #define DATA_MASK                (0x00FFFFFF)
 #define DATA_OFFSET              (0)
 
@@ -14,15 +20,19 @@
 
 #define GSR0_STATUS_FLAG_MASK    (0x0F)
 
+// SFCTL Register
 #define SFCTL_FIFO_CREF_MASK     (0x001FFF)
 #define SFCTL_FIFO_CREF_OFFSET   (0 << 0)
 
+// ADC0 Register
 #define ADC0_DIV_OFFSET          (14)
 #define ADC0_DIV_MASK            (0xFF << ADC0_DIV_OFFSET)
 
+// APU0 Register
 #define APU0_OFFSET              (0)
 #define APU0_MASK                (0xFFF << APU0_OFFSET)
 
+// PLL1_0 Register
 #define PLL1_0_FSU_OFFSET        (0)
 #define PLL1_0_FSU_MASK          (0xFFFFFF << PLL1_0_FSU_OFFSET)
 
@@ -32,6 +42,7 @@
 #define PLL1_2_RTU_OFFSET        (0)
 #define PLL1_2_RTU_MASK          (0x3FFF << PLL1_2_RTU_OFFSET)
 
+// CSU1_2 VGA Gain Registers
 #define CSU1_2_VGA_GAIN1_OFFSET  (2)
 #define CSU1_2_VGA_GAIN1_MASK    (0x7 << CSU1_2_VGA_GAIN1_OFFSET)
 
@@ -41,7 +52,9 @@
 #define CSU1_2_VGA_GAIN3_OFFSET  (12)
 #define CSU1_2_VGA_GAIN3_MASK    (0x7 << CSU1_2_VGA_GAIN3_OFFSET)
 
-// Flags
+// ===========================
+// Control Flags
+// ===========================
 #define SFCTL_MISO_HS_READ       (1 << 16)
 #define SFCTL_FIFO_LP_MODE       (1 << 13)
 #define WRITE_EN                 (0x01000000)
@@ -56,7 +69,9 @@
 #define CS_EN                    (1 << 4)
 #define MADC_EN                  (1 << 10)
 
+// ===========================
 // Register Addresses
+// ===========================
 #define MAIN_ADDR                (0x00)
 #define ADC0_ADDR                (0x01)
 #define CHIP_ID_ADDR             (0x02)
@@ -146,22 +161,37 @@
 #define FIFO_FSTAT_ADDR          (0x5F)
 #define FIFO_ADDR                (0x60)
 
-// FIFO
+// ===========================
+// FIFO Configuration
+// ===========================
 #define FIFO_SIZE                (8192)
 #define FIFO_SIZE_BYTE           (12288)
 #define DATA_SIZE                (4)
 
+// FIFO burst mode enable command
+// ===========================
 // 0xFF = Adress; 
 // FIFO-Address is shifted by (<< 1)
 // Address 0x60 << 1 = 0xC0
 // But when accessing this address, spi returns error!
-// Solution (optimizable! is to read 3 addresses before)
+// Solution (optimizable!) is to read 3 addresses before
 // and skip those values later
 const byte ENABLE_BURST_MODE[4] = {0xFF, 0xBD, 0x00, 0x00};
 
-// See Setup Saw-Tooth p.24
+// ===========================
+// Timing Configuration
+// ===========================
+// See Setup Saw-Tooth p.24 of BGT60TRxx Datasheet
 // T_SETUP > T_PAEN + T_SSTART - T_START
 constexpr size_t T_SETUP = 60; // [6us * 8/t_sys]
+
+
+// ===========================
+// Physical Constants
+// ===========================
+constexpr size_t F_ADC_CLK = 80;  // 80 MHz
+constexpr size_t STEP_CHIRP_DIVIDER = 8;
+constexpr size_t SPEED_OF_LIGHT = 300;  // in Mm/s
 
 typedef struct{
     size_t addr;
