@@ -26,9 +26,9 @@ inline bool operator!(BGT_status status) {
 }
 
 /**
- * @brief Class representing the BGT60TRXX sensor.
+ * @brief Class representing the BGT60TR13C sensor.
  */
-class BGT60TRXX
+class BGT60TR13C
 {
 private:
     // SPI Interface
@@ -129,8 +129,7 @@ private:
 public:
 
     /**
-    * Implementation of a BGT60-Radar sensor using one antenna.
-    * Creates a dynamic instance, which needs to be deleted by user!
+    * Implementation of an BGT60-Radar sensor using one antenna.
     * 
     * @param word_size The size of one word in the sensor. 
     * @param interrupt_handler Pointer to the interrupt handler function.
@@ -139,7 +138,7 @@ public:
     * @param board_freq Used board frequency
     * @param spi_interface SPI-Interface to Radar-Sensor, default used SPI-Default-Interface
     */
-    BGT60TRXX(
+    BGT60TR13C(
         size_t const word_size, 
         voidFuncPtr interrupt_handler,
         size_t pin_cs,
@@ -149,15 +148,14 @@ public:
     );
     
     /**
-    * Deinitializes the BGT60TRXX sensor.
+    * Deinitializes the BGT60TR13C sensor.
     * Frees all allocated memory.
     */
-    ~BGT60TRXX();
+    ~BGT60TR13C();
 
     // remove copy and assignment
-    BGT60TRXX(const BGT60TRXX&) = delete;
-    BGT60TRXX& operator=(const BGT60TRXX&) = delete;
-
+    BGT60TR13C(const BGT60TR13C&) = delete;
+    BGT60TR13C& operator=(const BGT60TR13C&) = delete;
     
     /**
     * Calculates the range resolution of the sensor.
@@ -167,14 +165,14 @@ public:
     float get_range_resolution();
 
     /**
-    * Reads a register from the BGT60TRXX sensor.
+    * Reads a register from the BGT60TR13C sensor.
     * @param reg_addr The address of the register to read.
     * @return The value of the register, or BGT_error on failure.
     */
     BGT_status read_reg(size_t const reg_addr);
 
     /**
-    * Writes a value to a register in the BGT60TRXX sensor.
+    * Writes a value to a register in the BGT60TR13C sensor.
     * @param reg_addr The address of the register to write to.
     * @param data The data to write to the register.
     * @return BGT_success on success, BGT_error on failure.
@@ -355,4 +353,4 @@ public:
 float calculate_range_from_index(int index, float range_resolution);
 
 
-#endif // BGT60TRXX_LIB_HPP
+#endif // BGT60_LIB_HPP

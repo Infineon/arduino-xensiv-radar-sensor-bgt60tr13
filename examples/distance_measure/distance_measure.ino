@@ -83,12 +83,12 @@ void detect_nearest_target(float const * const signal)
   }
 }
 
-BGT60TRXX* sensor;
+BGT60TR13C* sensor;
 void setup() {
   Serial.begin(115200);
   Serial.println("> Serial Monitor enabled.");
 
-  sensor = new BGT60TRXX(words, &interrupt_handler, RSPI_CS, RXRES_L, CHIP_FREQ, spi_interface);
+  sensor = new BGT60TR13C(words, &interrupt_handler, RSPI_CS, RXRES_L, CHIP_FREQ, spi_interface);
 
   Serial.println("> Reset sensor.");
   sensor->reset();
