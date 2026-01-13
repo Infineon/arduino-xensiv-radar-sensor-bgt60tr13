@@ -14,7 +14,7 @@ static const float threshold = 2.1;
 static float range_resolution;
 
 /*
-  Define the pins for the BGT60TR13C sensor->
+  Define the pins for the BGT60TR13C sensor.
   The Board used is the Infineon CY8CKIT-062S2-AI.
 */
 #define RSPI_MOSI 41
@@ -90,7 +90,7 @@ void setup() {
 
   sensor = new BGT60TRXX(words, &interrupt_handler, RSPI_CS, RXRES_L, CHIP_FREQ, spi_interface);
 
-  Serial.println("> Reset sensor->..");
+  Serial.println("> Reset sensor.");
   sensor->reset();
 
   sensor->set_adc_div(ADC_DIV);

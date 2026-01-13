@@ -264,7 +264,11 @@ BGT_status BGT60TRXX::set_vga_gain(size_t const channel, size_t const gain)
         case 1: return update_register_field(gain, CSU1_2_ADDR, CSU1_2_VGA_GAIN1_MASK, CSU1_2_VGA_GAIN1_OFFSET);
         case 2: return update_register_field(gain, CSU1_2_ADDR, CSU1_2_VGA_GAIN2_MASK, CSU1_2_VGA_GAIN2_OFFSET);
         case 3: return update_register_field(gain, CSU1_2_ADDR, CSU1_2_VGA_GAIN3_MASK, CSU1_2_VGA_GAIN3_OFFSET);
-        default: return BGT_status::BGT_error;
+        default:
+          Serial.print("set_vga_gain: invalid channel ");
+          Serial.print(channel);
+          Serial.println(" (valid range is 1-3)");
+          return BGT_status::BGT_error;
     }
 }
 
@@ -521,6 +525,7 @@ BGT_status BGT60TRXX::apply_anti_coupling_filter()
     }
     n++;
   }*/
+
   this->vReal[3] -= 28;
   this->vReal[4] -= 26;
   this->vReal[5] -= 19;

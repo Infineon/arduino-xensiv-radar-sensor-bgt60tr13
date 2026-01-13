@@ -51,7 +51,7 @@ static SPIClass* spi_interface = &SPI;
 
 
 /**
-  * @brief Handels float to string conversion for print
+  * @brief Handles float to string conversion for print
   */
 String ftos(float const value);
 
@@ -138,7 +138,7 @@ String ftos(float const value)
     static char buffer[buffer_size];
 
     int front = (int)value;
-    int back = (int)(abs(value-1.0*front)*100);
+    int back = (int)(abs(value-(float)front)*100);
     
     // Format the string
     snprintf(buffer, buffer_size, "%d.%d", front, back);

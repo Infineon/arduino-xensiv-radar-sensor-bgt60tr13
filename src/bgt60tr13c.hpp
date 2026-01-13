@@ -91,7 +91,7 @@ private:
     * @brief Writes data to the RegFile at a specified address.
     * @param address The address in the RegFile to write to.
     * @param data The data to write to the RegFile.
-    * @return BGT_status::BGT_success on success, BGT_status::BGT
+    * @return BGT_status::BGT_success on success, BGT_status::BGT_error on failure.
     */
     BGT_status write_to_regFile(size_t address, size_t data);
     
@@ -99,7 +99,7 @@ private:
     * @brief Sets specific bits in a register of the BGT sensor.
     * @param reg_addr The address of the register to modify.
     * @param bits The bits to set in the register.
-    * @return BGT_status::BGT_success on success, BGT_status::BGT
+    * @return BGT_status::BGT_success on success, BGT_status::BGT_error on failure.
     */
     BGT_status set_bits(size_t const reg_addr, size_t const bits);
 
@@ -108,19 +108,19 @@ private:
     * 
     *   Words (ADC) are represented in a byte array:
     *   a2 a1;  a0 b2;  b1 b0
-    * @return BGT_status::BGT_success on success, BGT_status::BGT
+    * @return BGT_status::BGT_success on success, BGT_status::BGT_error on failure.
     */
     BGT_status unpack_adc_data();
 
     /**
     * @brief Runs a high-pass filter on the real part of the FFT data.
-    * @return BGT_status::BGT_success on success, BGT_status::BGT
+    * @return BGT_status::BGT_success on success, BGT_status::BGT_error on failure.
     */
     BGT_status apply_highpass_filter();
 
     /**
-    * @brief Anti Coupling filter for Reciever/Transmitter Antenna
-    * @return BGT_status::BGT_success on success, BGT_status::BGT
+    * @brief Anti Coupling filter for receiver/transmitter antenna
+    * @return BGT_status::BGT_success on success, BGT_status::BGT_error on failure.
     */
     BGT_status apply_anti_coupling_filter();
 
@@ -129,7 +129,7 @@ private:
 public:
 
     /**
-    * Implementation of an BGT60-Radar sensor using one antenna.
+    * Implementation of a BGT60-Radar sensor using one antenna.
     * Creates a dynamic instance, which needs to be deleted by user!
     * 
     * @param word_size The size of one word in the sensor. 
