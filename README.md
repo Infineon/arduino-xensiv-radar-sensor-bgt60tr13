@@ -33,7 +33,7 @@ of the sensor yet.
 This module depends on the [arduinoFFT module](https://github.com/kosme/arduinoFFT),
 written by [kosme](https://github.com/kosme).
 
-## Installation of this Module
+## Installation
 
 ### Arduino IDE Library Manager
 Use the Arduino Library Manager and search for "BGT60TR13C" to find and install this library.
