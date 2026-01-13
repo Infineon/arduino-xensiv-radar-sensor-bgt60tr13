@@ -37,10 +37,10 @@ int bytes_to_int(byte const * const dataByte);
 static const size_t skipFirstValues = 6;
 
 
-void BGT60TRXX::_setup_interrupt(size_t const pin, voidFuncPtr handler)
+void BGT60TR13C::_setup_interrupt(size_t const pin, voidFuncPtr handler)
 {
-  this->interrupt_handler = interrupt_handler;
-  if(interrupt_handler != 0)
+  this->interrupt_handler = handler;
+  if(handler != 0)
   {
     // Set the IRQ handler
     attachInterrupt(digitalPinToInterrupt(pin), handler, RISING);
@@ -50,7 +50,7 @@ void BGT60TRXX::_setup_interrupt(size_t const pin, voidFuncPtr handler)
   }
 }
 
-void BGT60TRXX::_cache_chirp_config()
+void BGT60TR13C::_cache_chirp_config()
 {
   this->start_freq = (fetch_from_regFile(PLL1_0_ADDR) 
                       & PLL1_0_FSU_MASK);
@@ -60,7 +60,7 @@ void BGT60TRXX::_cache_chirp_config()
                       & PLL1_1_RSU_MASK);
 }
 
-BGT60TRXX::BGT60TRXX(
+BGT60TR13C::BGT60TR13C(
   size_t const word_size, 
   voidFuncPtr interrupt_handler,
   size_t pin_cs,
@@ -76,6 +76,7 @@ BGT60TRXX::BGT60TRXX(
   //Check if fifo overflow would happen
   if (this->frame_size > (FIFO_SIZE_BYTE - skipFirstValues))
   {
+    Serial.println("Frame size too large! FIFO Overflow of radar sensor would happen.");
     return;
   }  
   this->frame_size  += skipFirstValues;
@@ -83,6 +84,7 @@ BGT60TRXX::BGT60TRXX(
   this->data = (byte*) malloc(sizeof(byte)*(this->frame_size));
   if(this->data == 0)
   {
+    Serial.println("Could not allocate memory for data buffer!");
     return;
   }
 
@@ -119,7 +121,15 @@ BGT60TRXX::BGT60TRXX(
   // FFT Config
   this->vReal = (float*) malloc(sizeof(float)*(this->word_size));
   this->vImag = (float*) malloc(sizeof(float)*(this->word_size));
-  this->FFT = ArduinoFFT<float>(
+
+  if (vReal == 0 || vImag == 0) 
+  {
+    Serial.println("Could not allocate memory for FFT buffers!");
+    return;
+  }
+
+  this->FFT = ArduinoFFT<float>
+  (
     this->vReal, 
     this->vImag, 
     this->word_size, 
@@ -127,14 +137,26 @@ BGT60TRXX::BGT60TRXX(
   );
 }
 
-BGT60TRXX::~BGT60TRXX()
+BGT60TR13C::~BGT60TR13C()
 {
-  free(this->vReal); this->vReal = nullptr;
-  free(this->vImag); this->vImag = nullptr;
-  free(this->data); this->data = nullptr;
+  if(this->vReal == nullptr)
+  {
+    free(this->vReal); 
+    this->vReal = nullptr;
+  }
+  if(this->vImag == nullptr)
+  {
+    free(this->vImag); 
+    this->vImag = nullptr;
+  }
+  if(this->data == nullptr)
+  {
+    free(this->data); 
+    this->data = nullptr;
+  }
 }
     
-float BGT60TRXX::get_range_resolution()
+float BGT60TR13C::get_range_resolution()
 {
   size_t RSU = this->step_freq_chirp;
   size_t RTU = this->clk_per_chirp;
@@ -143,13 +165,13 @@ float BGT60TRXX::get_range_resolution()
                       * F_ADC_CLK 
                       * (((float)RSU) / pow(2,20));
 
-  // Multiply with 8! -> See Datasheet BGT60TRXX P.56 RTU
+  // Multiply with 8! -> See Datasheet BGT60TR13C P.56 RTU
   float bandwidth = (RTU * 8) * delta_f_RF;
 
   return SPEED_OF_LIGHT / (2.0f * bandwidth);
 }
 
-BGT_status BGT60TRXX::read_reg(size_t const reg_addr)
+BGT_status BGT60TR13C::read_reg(size_t const reg_addr)
 {
   // Only Address needs to be send
   // LSB = R/W = 0
@@ -180,7 +202,7 @@ BGT_status BGT60TRXX::read_reg(size_t const reg_addr)
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::write_reg(
+BGT_status BGT60TR13C::write_reg(
   size_t const reg_addr, 
   size_t const data
 )
@@ -202,7 +224,7 @@ BGT_status BGT60TRXX::write_reg(
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::set_adc_div(size_t const data)
+BGT_status BGT60TR13C::set_adc_div(size_t const data)
 {
   this->adc_div = data;
   this->FFT = ArduinoFFT<float>(
@@ -217,7 +239,7 @@ BGT_status BGT60TRXX::set_adc_div(size_t const data)
                         ADC0_DIV_OFFSET);
 }
 
-BGT_status BGT60TRXX::set_chirp_len(size_t const chirp_len)
+BGT_status BGT60TR13C::set_chirp_len(size_t const chirp_len)
 {
   return update_register_field(chirp_len, 
                         PLL1_3_ADDR, 
@@ -225,7 +247,7 @@ BGT_status BGT60TRXX::set_chirp_len(size_t const chirp_len)
                         APU0_OFFSET);
 }
 
-BGT_status BGT60TRXX::configure_chirp(size_t const N_FSU, size_t const N_RTU, size_t const N_RSU)
+BGT_status BGT60TR13C::configure_chirp(size_t const N_FSU, size_t const N_RTU, size_t const N_RSU)
 {
     if(!update_register_field(
       N_FSU, 
@@ -258,7 +280,7 @@ BGT_status BGT60TRXX::configure_chirp(size_t const N_FSU, size_t const N_RTU, si
 
     return BGT_status::BGT_success;
 }
-BGT_status BGT60TRXX::set_vga_gain(size_t const channel, size_t const gain)
+BGT_status BGT60TR13C::set_vga_gain(size_t const channel, size_t const gain)
 {
     switch(channel) {
         case 1: return update_register_field(gain, CSU1_2_ADDR, CSU1_2_VGA_GAIN1_MASK, CSU1_2_VGA_GAIN1_OFFSET);
@@ -272,7 +294,7 @@ BGT_status BGT60TRXX::set_vga_gain(size_t const channel, size_t const gain)
     }
 }
 
-BGT_status BGT60TRXX::update_register_field(
+BGT_status BGT60TR13C::update_register_field(
   size_t const data, 
   size_t const address, 
   size_t const reset_mask, 
@@ -287,7 +309,7 @@ BGT_status BGT60TRXX::update_register_field(
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::set_compare_value(
+BGT_status BGT60TR13C::set_compare_value(
   size_t const compare_value
 )
 {
@@ -298,7 +320,7 @@ BGT_status BGT60TRXX::set_compare_value(
                 SFCTL_FIFO_CREF_OFFSET);
 }
 
-BGT_status BGT60TRXX::enable_test_mode()
+BGT_status BGT60TR13C::enable_test_mode()
 {
   if(!set_bits(SFCTL_ADDR, TEST_MODE_EN)) 
     return BGT_status::BGT_error;
@@ -310,12 +332,12 @@ BGT_status BGT60TRXX::enable_test_mode()
   return reset_fsm();
 }
 
-BGT_status BGT60TRXX::start_frame()
+BGT_status BGT60TR13C::start_frame()
 {
   return set_bits(MAIN_ADDR, START_FRAME);
 }
 
-BGT_status BGT60TRXX::read_fifo()
+BGT_status BGT60TR13C::read_fifo()
 {
   // SPI Read
   digitalWrite(this->pin_cs, LOW);
@@ -362,7 +384,7 @@ void convert_to_db(float * const fft_data, size_t const length) {
   fft_data[0] = 0;  // Remove DC-Value
 }
 
-BGT_status BGT60TRXX::read_distance()
+BGT_status BGT60TR13C::read_distance()
 {
   if(!read_fifo()) return BGT_status::BGT_error;
   
@@ -380,7 +402,7 @@ BGT_status BGT60TRXX::read_distance()
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::init_sensor()
+BGT_status BGT60TR13C::init_sensor()
 {
   for (int i = 0; i < SIZE_REG_FILE; i++) 
   {
@@ -396,39 +418,39 @@ BGT_status BGT60TRXX::init_sensor()
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::reset_fifo()
+BGT_status BGT60TR13C::reset_fifo()
 {
   return set_bits(MAIN_ADDR, FIFO_RESET);
 }
 
-BGT_status BGT60TRXX::reset_fsm()
+BGT_status BGT60TR13C::reset_fsm()
 {
   return set_bits(MAIN_ADDR, FSM_RESET);
 }
 
-BGT_status BGT60TRXX::reset()
+BGT_status BGT60TR13C::reset()
 {
   return write_reg(MAIN_ADDR, SOFT_RESET);
 }
 
-size_t BGT60TRXX::calculate_RTU(size_t const adc_div, size_t const samples_per_chirp)
+size_t BGT60TR13C::calculate_RTU(size_t const adc_div, size_t const samples_per_chirp)
 {
   return ((size_t)((adc_div * samples_per_chirp)/8)) + T_SETUP;
 }
 
-size_t BGT60TRXX::calculate_FSU(size_t const start_freq)
+size_t BGT60TR13C::calculate_FSU(size_t const start_freq)
 {
   // 24 bit two complement needed for sensor
   return size_t(pow(2,20) * ((((float)start_freq/640000))-96)) & 0xFFFFFF;
 }
 
-size_t BGT60TRXX::calculate_RSU(size_t const bandwidth, size_t const RTU)
+size_t BGT60TR13C::calculate_RSU(size_t const bandwidth, size_t const RTU)
 {
   float dRF = bandwidth/(8*RTU);
   return size_t(pow(2,20) * dRF / 640000);
 }
 
-BGT_status BGT60TRXX::set_bits(size_t const reg_addr, size_t const bits)
+BGT_status BGT60TR13C::set_bits(size_t const reg_addr, size_t const bits)
 {
   if(!read_reg(reg_addr)) return BGT_status::BGT_error;
   int data = bytes_to_int(this->reg_data) | bits;
@@ -437,7 +459,7 @@ BGT_status BGT60TRXX::set_bits(size_t const reg_addr, size_t const bits)
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::unpack_adc_data()
+BGT_status BGT60TR13C::unpack_adc_data()
 {
   size_t byte_index = skipFirstValues;
   size_t fft_index = 0;
@@ -469,7 +491,7 @@ BGT_status BGT60TRXX::unpack_adc_data()
   return BGT_status::BGT_success;
 }
 
-BGT_status BGT60TRXX::apply_anti_coupling_filter()
+BGT_status BGT60TR13C::apply_anti_coupling_filter()
 {
   // Calculation: Typical: sig - mov_avg
   // y[i] = x[i] - 1/N sum_(k = i - (N-1))^(i)(x[k])
@@ -537,7 +559,7 @@ BGT_status BGT60TRXX::apply_anti_coupling_filter()
 }
 
 
-BGT_status BGT60TRXX::apply_highpass_filter()
+BGT_status BGT60TR13C::apply_highpass_filter()
 {
   // Coefficients for Chebyshev 2nd Order High-Pass Filter
   constexpr float b0 = 0.943;
@@ -581,7 +603,7 @@ BGT_status int_to_bytes(uint32_t data, byte* dataByte)
   return BGT_status::BGT_success;
 }
 
-size_t BGT60TRXX::fetch_from_regFile(size_t address)
+size_t BGT60TR13C::fetch_from_regFile(size_t address)
 {
   for (int i = 0; i < SIZE_REG_FILE; i++) {
     if(address == this->register_values[i].addr)
@@ -590,7 +612,7 @@ size_t BGT60TRXX::fetch_from_regFile(size_t address)
   return 0;
 }
 
-BGT_status BGT60TRXX::write_to_regFile(size_t address, size_t data)
+BGT_status BGT60TR13C::write_to_regFile(size_t address, size_t data)
 {
   for (int i = 0; i < SIZE_REG_FILE; i++) {
     if(address == this->register_values[i].addr)
@@ -613,12 +635,12 @@ int bytes_to_int(byte const * const dataByte)
   return data;
 }
 
-float* BGT60TRXX::get_fft_data()
+float* BGT60TR13C::get_fft_data()
 {
   return this->vReal;
 }
 
-size_t BGT60TRXX::get_fft_length() 
+size_t BGT60TR13C::get_fft_length() 
 {
   return this->word_size;
 }

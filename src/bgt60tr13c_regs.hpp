@@ -1,5 +1,5 @@
 // ================================================
-// Defines const values needed for BGT60TRXX Sensor
+// Defines const values needed for BGT60TR13C Sensor
 // Samuel Weissenbacher, 08.2025
 // ================================================
 

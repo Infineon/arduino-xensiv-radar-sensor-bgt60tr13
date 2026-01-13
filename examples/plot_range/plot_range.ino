@@ -63,12 +63,12 @@ void interrupt_handler()
   Serial.println(">Interrupt Handler called");
 }
 
-BGT60TRXX* sensor = nullptr;
+BGT60TR13C* sensor = nullptr;
 void setup() 
 {
   Serial.begin(115200);
 
-  sensor = new BGT60TRXX(words, &interrupt_handler, RSPI_CS, RXRES_L, CHIP_FREQ, spi_interface);
+  sensor = new BGT60TR13C(words, &interrupt_handler, RSPI_CS, RXRES_L, CHIP_FREQ, spi_interface);
 
   Serial.println("> Reset Sensor...");
   sensor->reset();
