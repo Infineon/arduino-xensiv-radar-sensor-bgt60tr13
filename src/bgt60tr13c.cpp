@@ -30,7 +30,7 @@ int bytes_to_int(byte const * const dataByte);
 */
 /**
  * @brief Number of bytes to skip before reading the FIFO.
- * This is necessary due to misaligned addresses in the BGT60TRxx sensor.
+ * This is necessary due to misaligned addresses in the BGT60TR13C sensor.
  * The FIFO address is 0x60, but reading it directly results in an error.
  * 4 words (or 6 bytes) seems to be the minimum value where an SPI-Read works.
  */
