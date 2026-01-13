@@ -1,38 +1,45 @@
-# Arduino Driver for 60 GHz Radar BGT60TRxx
-With this library a XENSIV™ BGT60TRxx 60 GHz radar sensor can be configured
-and used with Arduino.
+# XENSIV™ BGT60TR13C 60 GHz Radar Sensor
+
+With this library Infineon's XENSIV™ BGT60TR13C 60 GHz radar sensor can be configured
+and used with [Arduino](https://www.arduino.cc/) via SPI.
+
+Please refer to the product pages linked below for more information about the sensor and supported evaluation boards.
 
 > [!NOTE]  
 > This project is work in progress and not covering all functions
 of the sensor yet.   
-> If you are missing any functionality feel free to [contribute](https://github.com/Infineon/arduino-radar-bgt60tr13/fork) or [open an issue](https://github.com/Infineon/arduino-radar-bgt60tr13/issues).
+> If you are missing any functionality feel free to [contribute](https://github.com/Infineon/arduino-xensiv-radar-sensor-bgt60tr13/fork) or [open an issue](https://github.com/Infineon/arduino-xensiv-radar-sensor-bgt60tr13/issues).
 
-## Overview
-The [XENSIV™ BGT60TRxx](https://www.infineon.com/cms/en/product/sensor/radar-sensors/radar-sensors-for-iot/60ghz-radar/)
-is a 60 GHz radar sensor developed by Infineon, designed for advanced sensing applications.
+### Supported Products
 
-It supports detection ranges of up to 15 meters and features low power consumption,
-making it well-suited for a wide range of IoT use cases.
+<table>
+    <tr>
+        <td><img src="docs/img/bgt60tr13c.png" width=200></td>
+        <td><img src="docs/img/demo_bgt60tr13c.png" width=200></td>
+        <td><img src="docs/img/cy8ckit-062s2-ai.png" width=200></td>
+        <td><img src="docs/img/kit_csk_bgt60tr13c.jpg" width=200></td>
+    </tr>
+    <tr>
+        <td style="test-align : center"><a href="https://www.infineon.com/part/BGT60TR13C">XENSIV™ BGT60TR13C</a></td>
+        <td style="test-align : center"><a href="https://www.infineon.com/evaluation-board/DEMO-BGT60TR13C">Demo kit with XENSIV™ BGT60TR13C 60 GHz radar sensor</a></td>
+        <td style="test-align : center"><a href="https://www.infineon.com/evaluation-board/CY8CKIT-062S2-AI">PSOC™ 6 Artificial Intelligence Evaluation Kit</a></td>
+        <td style="test-align : center"><a href="https://www.infineon.com/evaluation-board/KIT-CSK-BGT60TR13C">XENSIV™ connected sensor kit with XENSIV™ BGT60TR13C 60 GHz radar sensor</a></td>
+    </tr>
+</table>
 
-Typical use cases:
- - Presence Detection/Segmentation
- - Touchless Interaction
- - Vital Sensing
+## Getting Started
 
-## Dependencies
+### Dependencies
 This module depends on the [arduinoFFT module](https://github.com/kosme/arduinoFFT),
-written by kosme.
+written by [kosme](https://github.com/kosme).
 
-## Installation of this Module
+## Installation
 
 ### Arduino IDE Library Manager
-Use the Arduino Library Manager to install the 'bgt60trxx_radar' library.
+Use the Arduino Library Manager and search for "BGT60TR13C" to find and install this library.
 
 ### Arduino IDE Manual Installation
-Download the desired .zip library version from the repository [releases](https://github.com/Infineon/arduino-radar-bgt60tr13/releases) section.
-
-> [!WARNING]  
-> As a general recommendation, downloading directly from the master branch should be avoided. Even though it should not, it could contain incomplete or faulty code.
+Download the desired .zip library version from the repository [releases](https://github.com/Infineon/arduino-xensiv-radar-sensor-bgt60tr13/releases) section or directly from the main branch.
 
 ## Usage
 

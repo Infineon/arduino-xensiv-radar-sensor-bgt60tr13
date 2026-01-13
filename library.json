@@ -1,13 +1,13 @@
 {
-    "name": "XENSIV BGT60TR13C Radar Sensor",
+    "name": "XENSIV Radar Sensor BGT60TR13C",
     "keywords": "Infineon, BGT60, sensor, radar, motion, presence, bgt60tr13c",
-    "description": "Arduino library for the Infineon BGT60TR13C radar sensor",
+    "description": "Arduino library for the Infineon XENSIV BGT60TR13C radar sensor",
     "repository":{
        "type":"git",
-       "url":"https://github.com/Infineon/arduino-radar-bgt60tr13",
+       "url":"https://github.com/Infineon/arduino-xensiv-radar-sensor-bgt60tr13",
        "branch":"main"
     },
-    "version":"1.0.0",
+    "version":"0.1.0",
     "license":"MIT",
     "frameworks":"arduino"
  }
