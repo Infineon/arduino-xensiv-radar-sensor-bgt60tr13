@@ -6,18 +6,10 @@ static const size_t no_of_chirps = 1;
 static const size_t samples_per_chirp = 128;
 static const size_t words = samples_per_chirp * no_of_chirps;
 static const size_t ADC_DIV = 60;
-static const size_t start_freq = 62500000;  // in kHz
-static const size_t bandwidth  =  2000000;    // in kHz
+static const size_t start_freq = 58000000;  // in kHz
+static const size_t bandwidth  =  4500000;    // in kHz
 
-static const float threshold_for_lower_freq = 43.8;
-static const float threshold_for_upper_freq = 33.5;
-
-static const size_t threshold_start = 20;  // in cm
-static const size_t threshold_end = 190;    // in cm
-
-static bgt60trxx_struct* bgt60trxx_sensor;
-
-static float fft_data[words / 2];
+static const float threshold = 2.1;
 
 static float range_resolution;
 
@@ -30,6 +22,8 @@ static float range_resolution;
 #define RSPI_SCLK 43
 #define RSPI_CS   44
 #define RXRES_L   40
+
+#define CHIP_FREQ 100000000
 
 #ifdef TARGET_APP_CY8CKIT_062S2_AI
 /* 
@@ -55,6 +49,8 @@ static SPIClass* spi_interface = &spi_radar_interface;
 static SPIClass* spi_interface = &SPI;
 #endif
 
+
+
 /**
  * @brief Interrupt handler function.
  */
@@ -62,7 +58,6 @@ void interrupt_handler() {
   Serial.println(">Interrupt Handler called");
 }
 
-float threshold_func[words / 2];
 /**
  * @brief Finds the nearest peak in the signal based on a threshold function.
  * 
@@ -72,82 +67,38 @@ float threshold_func[words / 2];
  *  else         -> build linear function between first two
  * 
  * @param signal Pointer to the signal data.
- * @param threshold_index_start Index to start the threshold function.
- * @param threshold_index_end Index to end the threshold function.
  */
-void find_nearest_peak(float const * const signal,
-                      size_t const threshold_index_start,
-                      size_t const threshold_index_end)
+void detect_nearest_target(float const * const signal)
 {
-  for(size_t i = 0; i < words/2; i++)
-  {
-    if (i < threshold_index_start)
-    {
-      threshold_func[i] = threshold_for_lower_freq;
-    }
-    else if(i > threshold_index_end)
-    {
-      threshold_func[i] = threshold_for_upper_freq;
-    }
-    else
-    {
-      // kx + d
-      threshold_func[i] = (-((threshold_for_lower_freq-threshold_for_upper_freq)
-                             /(threshold_index_end-threshold_index_start))
-                           *(i-threshold_index_start) 
-                           + threshold_for_lower_freq);
-    }
-  }
   for(size_t i = 1; i < words/2 - 1; i++)
   {
-    if (signal[i] > threshold_func[i])
+    if (signal[i] > threshold)
     {
+      float distance_cm = calculate_range_from_index(i, range_resolution) * 100.0 / no_of_chirps;
       Serial.print(">Peak detected at: ");
-      Serial.print(i*range_resolution / no_of_chirps);
+      Serial.print(distance_cm);
       Serial.println("cm");
       return;
     }
   }
 }
 
-/**
- * @brief Converts FFT data to dB scale.
- * @param fft_data Pointer to the FFT data array.
- * @param length Length of the FFT data array.
- */
-void fft_to_dB(float * const fft_data, size_t const length) {
-  size_t i = 1;
-  while (i < length) {
-    // clip signal
-    if(fft_data[i] < 0.001)
-      fft_data[i] = 0.001;
-    // calculate to dB-Scale
-    fft_data[i] = (10.0 * log10(fft_data[i]));
-    i += 1;
-  }
-  fft_data[0] = 0;  // Remove DC-Value
-}
-
+BGT60TR13C* sensor;
 void setup() {
   Serial.begin(115200);
+  Serial.println("> Serial Monitor enabled.");
 
-  printf("> Serial Monitor enabled.");
+  sensor = new BGT60TR13C(words, &interrupt_handler, RSPI_CS, RXRES_L, CHIP_FREQ, spi_interface);
 
-  bgt60trxx_sensor = init_struct(words, &interrupt_handler, RSPI_CS, RXRES_L, spi_interface);
-  if (!bgt60trxx_sensor) {
-    Serial.println("Sensor initialization failed!");
-    while (1);
-  }
+  Serial.println("> Reset sensor.");
+  sensor->reset();
 
-  Serial.println("> Reset Sensor...");
-  reset(bgt60trxx_sensor);
+  sensor->set_adc_div(ADC_DIV);
+  sensor->set_chirp_len(samples_per_chirp);
 
-  set_adc_div(bgt60trxx_sensor, ADC_DIV);
-  set_chirp_len(bgt60trxx_sensor, samples_per_chirp);
-
-  size_t FSU = calculate_FSU(start_freq);
-  size_t RTU = calculate_RTU(ADC_DIV, samples_per_chirp);
-  size_t RSU = calculate_RSU(bandwidth, RTU);
+  size_t FSU = sensor->calculate_FSU(start_freq);
+  size_t RTU = sensor->calculate_RTU(ADC_DIV, samples_per_chirp);
+  size_t RSU = sensor->calculate_RSU(bandwidth, RTU);
 
   Serial.print("> FSU = ");
   Serial.println(FSU);
@@ -158,42 +109,30 @@ void setup() {
   Serial.print("> RSU = ");
   Serial.println(RSU);
 
-  configure_chirp(bgt60trxx_sensor, FSU, RTU, RSU);
+  sensor->configure_chirp(FSU, RTU, RSU);
 
-  set_vga_gain_ch1(bgt60trxx_sensor, 3);
+  sensor->set_vga_gain(1, 3);
 
-  init_sensor(bgt60trxx_sensor);
+  sensor->init_sensor();
   Serial.println("> Sensor initialised!");
   
-  range_resolution = get_range_resolution(bgt60trxx_sensor) * 100;  // in cm
-  Serial.print("> Range resoultion is = ");
-  Serial.println(range_resolution);
+  range_resolution = sensor->get_range_resolution();  // in meters
+  Serial.print("> Range resolution is = ");
+  Serial.print(range_resolution * 100);
+  Serial.println(" cm");
   
-  start_frame(bgt60trxx_sensor);
+  sensor->start_frame();
 }
 
 void loop() {
-  read_distance(bgt60trxx_sensor);
+  sensor->read_distance();
+  
+  float* fft_measured_data = sensor->get_fft_data();
 
-  size_t const len = get_fft_length(bgt60trxx_sensor);
-  float* fft_measured_data = get_fft_data(bgt60trxx_sensor);
-
-  // divide by 2 -> removes duplication spectrum
-  for (size_t i = 0; i <len / 2; i++) {
-    fft_data[i] = abs(fft_measured_data[i]);
-  }
-
-  // transform data to db-scale
-  fft_to_dB(fft_data, len/2);
-
-  find_nearest_peak(
-    fft_data, 
-    threshold_start/(range_resolution/ no_of_chirps), 
-    threshold_end/(range_resolution/ no_of_chirps)
-  );
+  detect_nearest_target(fft_measured_data);
 
   delay(100);
   
-  reset_FIFO(bgt60trxx_sensor);
-  start_frame(bgt60trxx_sensor);
+  sensor->reset_fifo();
+  sensor->start_frame();
 }
