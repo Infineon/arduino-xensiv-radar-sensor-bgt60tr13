@@ -1,5 +1,5 @@
 """
-BGT60TRxx Radar Sensor - Server Side Data Receiver
+BGT60TR13C Radar Sensor - Server Side Data Receiver
 Reads FFT and threshold data from a serial port and visualizes it using Matplotlib.
 """
 import serial

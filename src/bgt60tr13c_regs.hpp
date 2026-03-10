@@ -180,7 +180,7 @@ const byte ENABLE_BURST_MODE[4] = {0xFF, 0xBD, 0x00, 0x00};
 // ===========================
 // Timing Configuration
 // ===========================
-// See Setup Saw-Tooth p.24 of BGT60TRxx Datasheet
+// See Setup Saw-Tooth p.24 of BGT60TR13C Datasheet
 // T_SETUP > T_PAEN + T_SSTART - T_START
 constexpr size_t T_SETUP = 60; // [6us * 8/t_sys]
 
