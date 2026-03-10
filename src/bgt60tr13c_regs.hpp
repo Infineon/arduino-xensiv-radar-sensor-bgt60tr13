@@ -1,6 +1,5 @@
 // ================================================
 // Defines const values needed for BGT60TR13C Sensor
-// Samuel Weissenbacher, 08.2025
 // ================================================
 
 #ifndef BGT60TR13C_DEFINE_HPP
