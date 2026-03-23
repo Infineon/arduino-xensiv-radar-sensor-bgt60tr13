@@ -4,7 +4,7 @@
 #include <string.h>
 
 // const values
-static const size_t zero_padding_factor = 4;
+static const size_t zero_padding_factor = 4; // needs to be 1,2,4...
 static const size_t samples_per_chirp = 128;
 static const size_t words = samples_per_chirp * zero_padding_factor;
 static const size_t ADC_DIV = 60;

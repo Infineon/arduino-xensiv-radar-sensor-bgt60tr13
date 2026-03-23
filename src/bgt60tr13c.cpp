@@ -408,6 +408,12 @@ bool BGT60TR13C::apply_window_function() {
   const float beta = PI * alpha;  // β = πα
   const float I0_beta = modified_bessel_i0(beta);  // Calculate I0(β) once
   const size_t window_len = this->chirp_len;
+
+  if(window_len < 2)
+  {
+    Serial.println("Window length must be at least 2 for Kaiser window.");
+    return false;
+  }
   
   for (size_t n = 0; n < window_len; n++) {
     // Calculate the Kaiser window value for sample n

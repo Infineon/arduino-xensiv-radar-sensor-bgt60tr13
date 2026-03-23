@@ -2,7 +2,7 @@
 #include "bgt60tr13c.hpp"
 
 // const values
-static const size_t zero_padding_factor = 4;
+static const size_t zero_padding_factor = 4; // needs to be 1,2,4...
 static const size_t samples_per_chirp = 128;
 static const size_t words = samples_per_chirp * zero_padding_factor;
 static const size_t ADC_DIV = 60;
@@ -91,7 +91,7 @@ void detect_local_maximum_peak(float const * const signal)
     {
       size_t local_max_index = i;
 
-      while (signal[local_max_index] >= signal[local_max_index - 1] && local_max_index > 0)
+      while (local_max_index > 0 && signal[local_max_index] >= signal[local_max_index - 1] )
       {
         local_max_index--;
       }
