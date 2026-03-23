@@ -71,6 +71,7 @@ BGT60TR13C::BGT60TR13C(
 {
   Serial.println("> Initalizing Sensor...");
   this->word_size = word_size;
+  this->chirp_len = word_size;
   this->frame_size = (size_t)(((float)word_size)*1.5 + 0.5);
 
   //Check if fifo overflow would happen
@@ -168,7 +169,9 @@ float BGT60TR13C::get_range_resolution()
   // Multiply with 8! -> See Datasheet BGT60TR13C P.56 RTU
   float bandwidth = (RTU * 8) * delta_f_RF;
 
-  return SPEED_OF_LIGHT / (2.0f * bandwidth);
+  int zero_padding_factor = this->word_size / this->chirp_len;
+
+  return SPEED_OF_LIGHT / (2.0f * bandwidth * zero_padding_factor);
 }
 
 BGT_status BGT60TR13C::read_reg(size_t const reg_addr)
@@ -241,6 +244,7 @@ BGT_status BGT60TR13C::set_adc_div(size_t const data)
 
 BGT_status BGT60TR13C::set_chirp_len(size_t const chirp_len)
 {
+  this->chirp_len = chirp_len;
   return update_register_field(chirp_len, 
                         PLL1_3_ADDR, 
                         APU0_MASK, 
@@ -384,12 +388,53 @@ void convert_to_db(float * const fft_data, size_t const length) {
   fft_data[0] = 0;  // Remove DC-Value
 }
 
+static float modified_bessel_i0(float x) {
+  float sum = 1.0;
+  float term = 1.0;
+  float x_half = x / 2.0;
+  
+  // Series expansion: I0(x) = sum of (x/2)^(2k) / (k!)^2
+  for (int k = 1; k < 20; k++) {  // 20 iterations for good accuracy
+    term *= (x_half / k) * (x_half / k);
+    sum += term;
+    if (term < 1e-8) break;  // Early termination if converged
+  }
+  
+  return sum;
+}
+
+bool BGT60TR13C::apply_window_function() {
+  const float alpha = 0.64;
+  const float beta = PI * alpha;  // β = πα
+  const float I0_beta = modified_bessel_i0(beta);  // Calculate I0(β) once
+  const size_t window_len = this->chirp_len;
+  
+  for (size_t n = 0; n < window_len; n++) {
+    // Calculate the Kaiser window value for sample n
+    // w[n] = I0(β * sqrt(1 - ((2n/L - 1))^2)) / I0(β)
+    
+    float norm_n = (2.0 * n) / (window_len - 1.0) - 1.0;  // Maps n to [-1, 1]
+    float arg = beta * sqrt(1.0 - norm_n * norm_n);
+    float window_value = modified_bessel_i0(arg) / I0_beta;
+    
+    // Apply window to the signal
+    this->vReal[n] *= window_value;
+  }
+  
+  return true;
+}
+
 BGT_status BGT60TR13C::read_distance()
 {
   if(!read_fifo()) return BGT_status::BGT_error;
   
   if(!unpack_adc_data()) return BGT_status::BGT_error;
+  
   if(!apply_highpass_filter()) return BGT_status::BGT_error;
+  
+  if(!apply_window_function()) return BGT_status::BGT_error;  
+
+  if(!add_zero_padding()) return BGT_status::BGT_error;
 
   // run FFT
   this->FFT.compute(FFTDirection::Forward);
@@ -491,6 +536,19 @@ BGT_status BGT60TR13C::unpack_adc_data()
   return BGT_status::BGT_success;
 }
 
+BGT_status BGT60TR13C::add_zero_padding()
+{
+  if(this->word_size != this->chirp_len)
+  {
+    for(size_t i = chirp_len; i < word_size; i++)
+    {
+      this->vReal[i] = 0.0;
+      this->vImag[i] = 0.0;
+    }
+  }
+  return BGT_status::BGT_success;
+}
+
 BGT_status BGT60TR13C::apply_anti_coupling_filter()
 {
   // Calculation: Typical: sig - mov_avg
@@ -500,61 +558,45 @@ BGT_status BGT60TR13C::apply_anti_coupling_filter()
   // all other bx = -1/N
   // For Decoupling we use a broad moving average to
   // calculate reflections out: N=10
-  float x0 = 0.0, x1 = 0.0, x2 = 0.0, x3 = 0.0, x4 = 0.0, x5 = 0.0, x6 = 0.0, x7 = 0.0, x8 = 0.0, x9 = 0.0, y0 = 0.0;
-  int i = 0;
-  constexpr float bx = -0.1; // -1/N
-  constexpr float b0 = 0.9; // (N-1)/N
+  constexpr int BASE_N = 10;
+  int zero_padding_factor = this->word_size / this->chirp_len;
+  const int N = BASE_N * zero_padding_factor;
+  
+  const float bx = -1.0f / (float)N;      // -1/N
+  const float b0 = (N - 1.0f) / (float)N; // (N-1)/N
+  
+  this->vReal[0] = this->vReal[1];
+  float xstart = this->vReal[0];
+  
+  // Initialize delay line with first sample
+  float delay_line[N];
+  for (int k = 0; k < N; k++)
+  {
+    delay_line[k] = xstart;
+  }
+  
   int limit = this->word_size;
-  while (i < limit)
+  for (int i = 0; i < limit; i++)
   {
-    x9 = x8;
-    x8 = x7;
-    x7 = x6;
-    x6 = x5;
-    x5 = x4;
-    x4 = x3;
-    x3 = x2;
-    x2 = x1;
-    x1 = x0;
-    x0 = this->vReal[i];
-    y0 = x0*b0 + x1*bx + x2*bx + x3*bx + x4*bx + x5*bx + x6*bx + x7*bx + x8*bx + x9*bx;
-    this->vReal[i] = y0;
-    i++;
-  }
+    float x_current = this->vReal[i];
     
-  // Using the filter, reflections should be calculated out
-  // To remove coupling between Rx and Tx decrease the values from the first 3 values
-  int j = 0;
-  while(j < 3)
-  {
-    this->vReal[j] = 0.0;
-    j++;
-  }
-
-  // Nearer Targets get detected much better,
-  // but we want to have one threshold level to detect
-  // every value. Decreasing it using a linear function
-  // helps here
-  /*int n = 3; // start with 3, the other values cant be used anyways
-  limit = 9;
-  float k = 28.0; // Initial adjustment value
-  while (n < limit)
-  {
-    if (k > 0.0)
+    // Update Buffer
+    for (int k = N-1; k >= 1; k--)
     {
-      this->vReal[n] -= k;
-      k -= 3.0;
+      delay_line[k] = delay_line[k-1];
     }
-    n++;
-  }*/
-
-  this->vReal[3] -= 28;
-  this->vReal[4] -= 26;
-  this->vReal[5] -= 19;
-  this->vReal[6] -= 12;
-  this->vReal[7] -= 11;
-  this->vReal[8] -= 4;
+    delay_line[0] = x_current;
     
+    // Calculate moving average output
+    float y = x_current * b0;
+    for (int k = 1; k < N; k++)
+    {
+      y += delay_line[k] * bx;
+    }
+
+    this->vReal[i] = y;
+  }
+  
   return BGT_status::BGT_success;
 }
 
