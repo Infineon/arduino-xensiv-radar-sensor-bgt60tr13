@@ -2,14 +2,14 @@
 #include "bgt60tr13c.hpp"
 
 // const values
-static const size_t no_of_chirps = 1;
+static const size_t zero_padding_factor = 4; // needs to be 1,2,4...
 static const size_t samples_per_chirp = 128;
-static const size_t words = samples_per_chirp * no_of_chirps;
+static const size_t words = samples_per_chirp * zero_padding_factor;
 static const size_t ADC_DIV = 60;
 static const size_t start_freq = 58000000;  // in kHz
-static const size_t bandwidth  =  4500000;    // in kHz
+static const size_t bandwidth  =  2500000;    // in kHz
 
-static const float threshold = 2.1;
+static const float threshold = 4.0;
 
 static float range_resolution;
 
@@ -74,8 +74,30 @@ void detect_nearest_target(float const * const signal)
   {
     if (signal[i] > threshold)
     {
-      float distance_cm = calculate_range_from_index(i, range_resolution) * 100.0 / no_of_chirps;
+      float distance_cm = calculate_range_from_index(i, range_resolution) * 100.0;
       Serial.print(">Peak detected at: ");
+      Serial.print(distance_cm);
+      Serial.println("cm");
+      return;
+    }
+  }
+}
+
+void detect_local_maximum_peak(float const * const signal)
+{
+  for (size_t i = 1; i < words / 2; ++i)
+  {
+    if (signal[i] > threshold && signal[i] > signal[i - 1])
+    {
+      size_t local_max_index = i;
+
+      while (local_max_index > 0 && signal[local_max_index] >= signal[local_max_index - 1] )
+      {
+        local_max_index--;
+      }
+      
+      float distance_cm = calculate_range_from_index(local_max_index, range_resolution) * 100.0;
+      Serial.print(">Local maximum peak detected at: ");
       Serial.print(distance_cm);
       Serial.println("cm");
       return;
@@ -129,7 +151,8 @@ void loop() {
   
   float* fft_measured_data = sensor->get_fft_data();
 
-  detect_nearest_target(fft_measured_data);
+  //detect_nearest_target(fft_measured_data);
+  detect_local_maximum_peak(fft_measured_data);
 
   delay(100);
   

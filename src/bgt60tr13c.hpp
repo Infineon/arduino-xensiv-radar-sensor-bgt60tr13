@@ -39,6 +39,7 @@ private:
     // Transfer of SPI Interface
     //============================
     size_t word_size;
+    size_t chirp_len;
     size_t frame_size;
     
     // Buffers for performance
@@ -112,6 +113,15 @@ private:
     */
     BGT_status unpack_adc_data();
 
+    /**
+    * @brief Fills data correctly using Zero-Padding
+    * @return BGT_status::BGT_success on success, BGT_status::BGT_error on failure.
+    */
+    BGT_status add_zero_padding();
+
+
+    bool apply_window_function();
+    
     /**
     * @brief Runs a high-pass filter on the real part of the FFT data.
     * @return BGT_status::BGT_success on success, BGT_status::BGT_error on failure.
