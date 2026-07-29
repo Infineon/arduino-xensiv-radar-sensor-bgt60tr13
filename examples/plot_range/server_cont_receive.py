@@ -3,13 +3,13 @@ BGT60TR13C Radar Sensor - Server Side Data Receiver
 Reads FFT and threshold data from a serial port and visualizes it using Matplotlib.
 """
 import serial
+import serial.tools.list_ports
 import matplotlib.pyplot as plt
 import time
 from typing import Tuple, List, Optional
 
 # Configuration
 CONFIG = {
-    'port': 'COM4',
     'baudrate': 115200,
     'timeout': 1,
     'figure_size': (9, 6),
@@ -30,6 +30,43 @@ SKIP_PATTERNS = [
 def should_skip_line(line: str) -> bool:
     """Check if the line should be skipped based on skip patterns."""
     return not line or any(pattern in line for pattern in SKIP_PATTERNS)
+
+def select_serial_port() -> Optional[str]:
+    """
+    Scan the available serial ports and let the user choose one.
+
+    Returns:
+        The selected port device name, or None if no port is available or
+        the selection is aborted.
+    """
+    ports = list(serial.tools.list_ports.comports())
+    if not ports:
+        print("No serial ports found.")
+        return None
+
+    print("Available serial ports:")
+    for index, port in enumerate(ports):
+        description = port.description or "n/a"
+        print(f"  [{index}] {port.device} - {description}")
+
+    while True:
+        choice = input(
+            f"Select a port [0-{len(ports) - 1}] (or 'q' to quit): "
+        ).strip()
+
+        if choice.lower() in ('q', 'quit', 'exit'):
+            return None
+
+        try:
+            selected = int(choice)
+        except ValueError:
+            print("Please enter a valid number.")
+            continue
+
+        if 0 <= selected < len(ports):
+            return ports[selected].device
+
+        print(f"Please enter a number between 0 and {len(ports) - 1}.")
 
 def parse_data_point(data_point: str) -> Optional[Tuple[float, float]]:
     """
@@ -146,9 +183,16 @@ def main():
     Main function to read serial data and visualize radar measurements.
     Continuously reads FFT and threshold data from the serial port and plots it.
     """
+    ser = None
     try:
+        # Ask the user which serial port to use
+        port = select_serial_port()
+        if port is None:
+            print("No serial port selected. Exiting...")
+            return
+
         # Open the serial port
-        ser = serial.Serial(CONFIG['port'], 
+        ser = serial.Serial(port,
                             CONFIG['baudrate'], 
                             timeout=CONFIG['timeout'])
 
