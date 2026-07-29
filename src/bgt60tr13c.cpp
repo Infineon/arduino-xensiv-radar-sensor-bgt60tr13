@@ -172,7 +172,10 @@ float BGT60TR13C::get_range_resolution()
   // Multiply with 8! -> See Datasheet BGT60TR13C P.56 RTU
   float bandwidth = (RTU * 8) * delta_f_RF;
 
-  int zero_padding_factor = this->word_size / this->chirp_len;
+  if(this->chirp_len == 0 || this->word_size < this->chirp_len)
+    return 0.0f;
+
+  float const zero_padding_factor = (float)this->word_size / (float)this->chirp_len;
 
   return SPEED_OF_LIGHT / (2.0f * bandwidth * zero_padding_factor);
 }
