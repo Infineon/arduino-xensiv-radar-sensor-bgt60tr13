@@ -1,17 +1,11 @@
-#include <SPI.h>
-#include "bgt60tr13c.hpp"
+#include "bgt60_radar.hpp"
 
 // const values
-static const size_t zero_padding_factor = 4; // needs to be 1,2,4...
-static const size_t samples_per_chirp = 128;
-static const size_t words = samples_per_chirp * zero_padding_factor;
-static const size_t ADC_DIV = 60;
-static const size_t start_freq = 58000000;  // in kHz
-static const size_t bandwidth  =  2500000;    // in kHz
-
-static const float threshold = 4.0;
-
-static float range_resolution;
+// Maximum measurable distance in meters. A smaller value raises the chirp
+// bandwidth and gives finer resolution; a larger value lowers the bandwidth,
+// so resolution gets coarser and far/weak targets are harder to measure.
+static const float max_range = 2.4;    // in meters (~2.5 GHz sweep)
+static const float threshold = 3.7;
 
 /*
   Define the pins for the BGT60TR13C sensor.
@@ -58,104 +52,41 @@ void interrupt_handler() {
   Serial.println(">Interrupt Handler called");
 }
 
-/**
- * @brief Finds the nearest peak in the signal based on a threshold function.
- * 
- * Uses this Threshold Function:
- *  if x < start -> threshold_for_lower_freq
- *  if x > end   -> threshold_for_upper_freq
- *  else         -> build linear function between first two
- * 
- * @param signal Pointer to the signal data.
- */
-void detect_nearest_target(float const * const signal)
-{
-  for(size_t i = 1; i < words/2 - 1; i++)
-  {
-    if (signal[i] > threshold)
-    {
-      float distance_cm = calculate_range_from_index(i, range_resolution) * 100.0;
-      Serial.print(">Peak detected at: ");
-      Serial.print(distance_cm);
-      Serial.println("cm");
-      return;
-    }
-  }
-}
+BGT60Radar radar;
 
-void detect_local_maximum_peak(float const * const signal)
-{
-  for (size_t i = 1; i < words / 2; ++i)
-  {
-    if (signal[i] > threshold && signal[i] > signal[i - 1])
-    {
-      size_t local_max_index = i;
-
-      while (local_max_index > 0 && signal[local_max_index] >= signal[local_max_index - 1] )
-      {
-        local_max_index--;
-      }
-      
-      float distance_cm = calculate_range_from_index(local_max_index, range_resolution) * 100.0;
-      Serial.print(">Local maximum peak detected at: ");
-      Serial.print(distance_cm);
-      Serial.println("cm");
-      return;
-    }
-  }
-}
-
-BGT60TR13C* sensor;
 void setup() {
   Serial.begin(115200);
   Serial.println("> Serial Monitor enabled.");
 
-  sensor = new BGT60TR13C(words, &interrupt_handler, RSPI_CS, RXRES_L, CHIP_FREQ, spi_interface);
+  RadarConfig config;
+  config.pin_cs            = RSPI_CS;
+  config.pin_interrupt     = RXRES_L;
+  config.board_freq        = CHIP_FREQ;
+  config.interrupt_handler = &interrupt_handler;
+  config.spi_interface     = spi_interface;
+  config.max_range         = max_range;
+  config.vga_gain          = 3;
 
-  Serial.println("> Reset sensor.");
-  sensor->reset();
-
-  sensor->set_adc_div(ADC_DIV);
-  sensor->set_chirp_len(samples_per_chirp);
-
-  size_t FSU = sensor->calculate_FSU(start_freq);
-  size_t RTU = sensor->calculate_RTU(ADC_DIV, samples_per_chirp);
-  size_t RSU = sensor->calculate_RSU(bandwidth, RTU);
-
-  Serial.print("> FSU = ");
-  Serial.println(FSU);
-  
-  Serial.print("> RTU = ");
-  Serial.println(RTU);
-  
-  Serial.print("> RSU = ");
-  Serial.println(RSU);
-
-  sensor->configure_chirp(FSU, RTU, RSU);
-
-  sensor->set_vga_gain(1, 3);
-
-  sensor->init_sensor();
+  if (!radar.init(config)) {
+    Serial.println("> Sensor initialisation failed!");
+    return;
+  }
   Serial.println("> Sensor initialised!");
-  
-  range_resolution = sensor->get_range_resolution();  // in meters
+
   Serial.print("> Range resolution is = ");
-  Serial.print(range_resolution * 100);
+  Serial.print(radar.get_range_resolution() * 100);
   Serial.println(" cm");
-  
-  sensor->start_frame();
 }
 
 void loop() {
-  sensor->read_distance();
-  
-  float* fft_measured_data = sensor->get_fft_data();
+  if (!radar.read_distance())
+    return;
 
-  //detect_nearest_target(fft_measured_data);
-  detect_local_maximum_peak(fft_measured_data);
-
-  delay(100);
-  
-  sensor->reset_fifo();
-  sensor->start_frame();
+  // Range to the nearest target above the threshold (in meters), or < 0 if none.
+  float distance = radar.raw()->get_nearest_distance(threshold);
+  if (distance >= 0.0) {
+    Serial.print(">Nearest target at: ");
+    Serial.print(distance * 100.0);
+    Serial.println("cm");
+  }
 }

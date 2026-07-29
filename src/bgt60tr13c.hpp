@@ -19,6 +19,14 @@ enum class BGT_status : uint8_t {
 typedef void (*voidFuncPtr)();
 
 /**
+ * @brief A detected radar target (peak in the range profile).
+ */
+struct RadarPeak {
+    float distance;   ///< Range to the target in meters (sub-bin interpolated).
+    float magnitude;  ///< Peak amplitude in dB.
+};
+
+/**
  * @brief Overloaded operator to check if BGT_status is an error.
  */
 inline bool operator!(BGT_status status) {
@@ -352,6 +360,41 @@ public:
     * @return The length of the FFT data.
     */
     size_t get_fft_length();
+
+    /**
+    * @brief Detects targets in the current range profile.
+    *
+    * Scans the usable half of the range spectrum (skipping the DC bin) and
+    * reports every local maximum whose amplitude exceeds @p threshold. Each
+    * peak's position is refined with parabolic interpolation for sub-bin range
+    * accuracy. Requiring a strict local maximum (rising then falling) on top of
+    * the threshold rejects noise ripples that merely cross the threshold.
+    *
+    * Peaks are returned ordered by increasing range, so @p peaks[0] is the
+    * nearest target. Call @ref read_distance beforehand to populate the profile.
+    *
+    * @param threshold Minimum peak amplitude in dB to qualify as a target.
+    * @param peaks Output array that receives the detected peaks.
+    * @param max_peaks Capacity of @p peaks; detection stops once it is full.
+    * @return Number of peaks written to @p peaks (0 if none / invalid args).
+    */
+    size_t detect_peaks(
+        float const threshold, 
+        RadarPeak* peaks, 
+        size_t const max_peaks
+    );
+
+    /**
+    * @brief Convenience: range to the nearest target above a threshold.
+    *
+    * Equivalent to taking the first peak from @ref detect_peaks. Call
+    * @ref read_distance beforehand to populate the range profile.
+    *
+    * @param threshold Minimum peak amplitude in dB to qualify as a target.
+    * @return Range to the nearest target in meters, or a negative value if no
+    *         target exceeds the threshold.
+    */
+    float get_nearest_distance(float const threshold);
 };
 
 /**

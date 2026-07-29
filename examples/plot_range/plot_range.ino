@@ -1,19 +1,14 @@
-#include <SPI.h>
 #include <time.h>
-#include "bgt60tr13c.hpp"
 #include <string.h>
+#include "bgt60_radar.hpp"
 
 // const values
-static const size_t zero_padding_factor = 4; // needs to be 1,2,4...
-static const size_t samples_per_chirp = 128;
-static const size_t words = samples_per_chirp * zero_padding_factor;
-static const size_t ADC_DIV = 60;
-static const size_t start_freq = 58000000;  // in kHz
-static const size_t bandwidth  =  2750000;    // in kHz
+// Maximum measurable distance in meters. A smaller value raises the chirp
+// bandwidth and gives finer resolution; a larger value lowers the bandwidth,
+// so resolution gets coarser and far/weak targets are harder to measure.
+static const float max_range = 3.20;    // in meters (~2.5 GHz sweep)
 
-static float range_resolution;
-
-static float threshold = 4.0;
+static float threshold = 3.8;
 
 /*
   Define the pins for the BGT60TR13C sensor.
@@ -63,60 +58,44 @@ void interrupt_handler()
   Serial.println(">Interrupt Handler called");
 }
 
-BGT60TR13C* sensor = nullptr;
+BGT60Radar radar;
 void setup() 
 {
   Serial.begin(115200);
 
-  sensor = new BGT60TR13C(words, &interrupt_handler, RSPI_CS, RXRES_L, CHIP_FREQ, spi_interface);
+  RadarConfig config;
+  config.pin_cs            = RSPI_CS;
+  config.pin_interrupt     = RXRES_L;
+  config.board_freq        = CHIP_FREQ;
+  config.interrupt_handler = &interrupt_handler;
+  config.spi_interface     = spi_interface;
+  config.max_range         = max_range;
+  config.vga_gain          = 3;
 
-  Serial.println("> Reset Sensor...");
-  sensor->reset();
-
-  sensor->set_adc_div(ADC_DIV);
-  sensor->set_chirp_len(samples_per_chirp);
-
-  size_t FSU = sensor->calculate_FSU(start_freq);
-  size_t RTU = sensor->calculate_RTU(ADC_DIV, samples_per_chirp);
-  size_t RSU = sensor->calculate_RSU(bandwidth, RTU);
-  
-  Serial.print("> FSU = ");
-  Serial.println(FSU);
-  
-  Serial.print("> RTU = ");
-  Serial.println(RTU);
-  
-  Serial.print("> RSU = ");
-  Serial.println(RSU);
-
-  sensor->configure_chirp(FSU, RTU, RSU);
-
-  sensor->set_vga_gain(1, 2);
-
-  sensor->init_sensor();
+  if (!radar.init(config)) {
+    Serial.println("> Sensor initialisation failed!");
+    return;
+  }
   Serial.println("> Sensor initialised!");
-  
-  range_resolution = sensor->get_range_resolution();  // in meters
+
   Serial.print("> Range resolution is = ");
-  Serial.print(range_resolution * 100);
+  Serial.print(radar.get_range_resolution() * 100);
   Serial.println(" cm");
-  
-  sensor->start_frame();
 }
 
 void loop() 
 {
-  sensor->read_distance();
-  
-  size_t const len = sensor->get_fft_length();
-  float* fft_measured_data = sensor->get_fft_data();
+  if (!radar.read_distance())
+    return;
 
-  // Only us length/2 -> removes duplication spectrum
+  DistanceData d = radar.get_distance_data();
+
+  // Only length/2 bins carry unique range information (handled by the wrapper).
   String data_output = "fft;";
   String threshold_output = "threshold;";
-  for (size_t i = 0; i < len / 2; i++) {
-      float distance_cm = calculate_range_from_index(i, range_resolution) * 100.0;
-      data_output += ftos(distance_cm) + "," + ftos(fft_measured_data[i]) + ";";
+  for (size_t i = 0; i < d.length; i++) {
+      float distance_cm = i * d.range_resolution * 100.0;
+      data_output += ftos(distance_cm) + "," + ftos(d.magnitudes[i]) + ";";
       threshold_output += ftos(distance_cm) + "," + ftos(threshold) + ";";
   }
 
@@ -125,11 +104,6 @@ void loop()
 
   // send special string to now plot threshold
   Serial.println(threshold_output);
-
-  delay(100);
-  
-  sensor->reset_fifo();
-  sensor->start_frame();
 }
 
 String ftos(float const value) 

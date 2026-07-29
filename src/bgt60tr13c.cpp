@@ -70,6 +70,9 @@ BGT60TR13C::BGT60TR13C(
 )
 {
   Serial.println("> Initalizing Sensor...");
+  this->data = nullptr;
+  this->vReal = nullptr;
+  this->vImag = nullptr;
   this->word_size = word_size;
   this->chirp_len = word_size;
   this->frame_size = (size_t)(((float)word_size)*1.5 + 0.5);
@@ -140,17 +143,17 @@ BGT60TR13C::BGT60TR13C(
 
 BGT60TR13C::~BGT60TR13C()
 {
-  if(this->vReal == nullptr)
+  if(this->vReal != nullptr)
   {
     free(this->vReal); 
     this->vReal = nullptr;
   }
-  if(this->vImag == nullptr)
+  if(this->vImag != nullptr)
   {
     free(this->vImag); 
     this->vImag = nullptr;
   }
-  if(this->data == nullptr)
+  if(this->data != nullptr)
   {
     free(this->data); 
     this->data = nullptr;
@@ -169,7 +172,10 @@ float BGT60TR13C::get_range_resolution()
   // Multiply with 8! -> See Datasheet BGT60TR13C P.56 RTU
   float bandwidth = (RTU * 8) * delta_f_RF;
 
-  int zero_padding_factor = this->word_size / this->chirp_len;
+  if(this->chirp_len == 0 || this->word_size < this->chirp_len)
+    return 0.0f;
+
+  float const zero_padding_factor = (float)this->word_size / (float)this->chirp_len;
 
   return SPEED_OF_LIGHT / (2.0f * bandwidth * zero_padding_factor);
 }
@@ -691,6 +697,68 @@ float* BGT60TR13C::get_fft_data()
 size_t BGT60TR13C::get_fft_length() 
 {
   return this->word_size;
+}
+
+size_t BGT60TR13C::detect_peaks(
+  float const threshold, 
+  RadarPeak* peaks, 
+  size_t const max_peaks
+)
+{
+  if(peaks == nullptr || max_peaks == 0)
+    return 0;
+
+  float const range_resolution = get_range_resolution();
+
+  // Only the lower half of the spectrum carries unique range information.
+  size_t const half = this->word_size / 2;
+  size_t count = 0;
+
+  // Start at bin 1 to skip DC; stop one bin early so i+1 stays in range.
+  for(size_t i = 1; i + 1 < half; i++)
+  {
+    float const y0 = this->vReal[i - 1];
+    float const y1 = this->vReal[i];
+    float const y2 = this->vReal[i + 1];
+
+    // Threshold gate: reject everything at or below the noise floor.
+    if(y1 <= threshold)
+      continue;
+
+    // Strict local maximum (rising then non-rising) rejects noise ripples
+    // and ensures each peak is reported only once.
+    if(!(y1 > y0 && y1 >= y2))
+      continue;
+
+    // Parabolic interpolation over the three samples around the peak to get a
+    // sub-bin estimate of the true peak position and amplitude.
+    float const denom = (y0 - 2.0f * y1 + y2);
+    float delta = 0.0f;
+    if(denom != 0.0f)
+      delta = 0.5f * (y0 - y2) / denom;
+
+    // Guard against interpolation running away on flat/odd shapes.
+    if(delta > 0.5f)  delta = 0.5f;
+    if(delta < -0.5f) delta = -0.5f;
+
+    peaks[count].distance = ((float)i + delta) * range_resolution;
+    peaks[count].magnitude = y1 - 0.25f * (y0 - y2) * delta;
+    count++;
+
+    if(count >= max_peaks)
+      break;
+  }
+
+  return count;
+}
+
+float BGT60TR13C::get_nearest_distance(float const threshold)
+{
+  RadarPeak nearest;
+  if(detect_peaks(threshold, &nearest, 1) == 0)
+    return -1.0f;
+
+  return nearest.distance;
 }
 
 float calculate_range_from_index(int index, float range_resolution)
