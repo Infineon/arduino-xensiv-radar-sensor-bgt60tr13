@@ -4,16 +4,16 @@
 #include <string.h>
 
 // const values
-static const size_t no_of_chirps = 1;
+static const size_t zero_padding_factor = 4; // needs to be 1,2,4...
 static const size_t samples_per_chirp = 128;
-static const size_t words = samples_per_chirp * no_of_chirps;
+static const size_t words = samples_per_chirp * zero_padding_factor;
 static const size_t ADC_DIV = 60;
 static const size_t start_freq = 58000000;  // in kHz
-static const size_t bandwidth  =  4500000;    // in kHz
+static const size_t bandwidth  =  2750000;    // in kHz
 
 static float range_resolution;
 
-static float threshold = 2.1;
+static float threshold = 4.0;
 
 /*
   Define the pins for the BGT60TR13C sensor.
@@ -91,7 +91,7 @@ void setup()
 
   sensor->configure_chirp(FSU, RTU, RSU);
 
-  sensor->set_vga_gain(1, 3);
+  sensor->set_vga_gain(1, 2);
 
   sensor->init_sensor();
   Serial.println("> Sensor initialised!");
@@ -115,7 +115,7 @@ void loop()
   String data_output = "fft;";
   String threshold_output = "threshold;";
   for (size_t i = 0; i < len / 2; i++) {
-      float distance_cm = calculate_range_from_index(i, range_resolution) * 100.0 / no_of_chirps;
+      float distance_cm = calculate_range_from_index(i, range_resolution) * 100.0;
       data_output += ftos(distance_cm) + "," + ftos(fft_measured_data[i]) + ";";
       threshold_output += ftos(distance_cm) + "," + ftos(threshold) + ";";
   }
@@ -134,7 +134,7 @@ void loop()
 
 String ftos(float const value) 
 {
-    static int const buffer_size = 16;
+    static int const buffer_size = 7;
     static char buffer[buffer_size];
 
     int front = (int)value;
