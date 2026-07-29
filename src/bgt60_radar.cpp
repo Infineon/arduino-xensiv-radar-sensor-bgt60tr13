@@ -51,8 +51,13 @@ bool BGT60Radar::init(const RadarConfig& config)
 
   size_t const bandwidth = (size_t)(bandwidth_f + 0.5f);  // kHz, rounded
 
-  size_t const word_size = config.samples_per_chirp * config.zero_padding_factor;
+  if(config.zero_padding_factor == 0)
+  {
+    Serial.println("> init: zero_padding_factor must be >= 1.");
+    return false;
+  }
 
+  size_t const word_size = config.samples_per_chirp * config.zero_padding_factor;
   // Re-initialisation: drop any previous sensor instance first.
   if(this->sensor != nullptr)
   {
